@@ -2,6 +2,7 @@
 /*********************
  *      INCLUDES
  *********************/
+#include <pubsub.h>
 #include <string.h>
 
 #include "esp_system.h"
@@ -105,6 +106,8 @@ void pulse_timer_fn( TimerHandle_t xTimer )
     if( pcnt_get_counter_value( COUNTER_UNIT, &pulse_count ) == ESP_OK ) {
         // Determine RPM from Pulse Count
         int32_t rpm = pulse_count * ( ( 1000 / SAMPLING_WINDOW_MS ) * 60 );
+
+        PUB_INT("rpm_pulse_counter", rpm);
     }
 
     // Clear Counter

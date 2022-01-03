@@ -1,3 +1,5 @@
+#include <pubsub.h>
+
 #include "hw_rpm_pulse_counter.h"
 
 void app_main()
@@ -13,11 +15,12 @@ void app_main()
   /*
    * Initialization
    */
+  ps_init();
   hw_rpm_pulse_counter_init();
 
 
   /*
    * Start
    */
-    hw_rpm_pulse_counter_start();
+  hw_rpm_pulse_counter_start();
 }

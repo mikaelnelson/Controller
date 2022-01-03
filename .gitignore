@@ -56,3 +56,5 @@ dkms.conf
 .pio/
 
 cmake-build-debug/
+
+.DS_Store
