@@ -1,6 +1,7 @@
 #include <pubsub.h>
 
 #include "hw_rpm_pulse_counter.h"
+#include "hw_ws2812b_ring.h"
 
 void app_main()
 {
@@ -17,6 +18,7 @@ void app_main()
    */
   ps_init();
   hw_rpm_pulse_counter_init();
+    hw_ws2812b_ring_init();
 
 
   /*

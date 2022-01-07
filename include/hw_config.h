@@ -10,10 +10,14 @@ extern "C" {
  *********************/
 #include "driver/pcnt.h"
 #include "driver/i2c.h"
+#include "driver/rmt.h"
 
 /*********************
  *      DEFINES
  *********************/
+
+#define WS2812B_CHANNEL             RMT_CHANNEL_0
+#define WS2812B_DO_PIN              2
 
 #define I2C_SCL_PIN                 12
 #define I2C_SDA_PIN                 13
