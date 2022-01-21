@@ -1,0 +1,64 @@
+!BIG-ENDIAN
+
+/***********************************************
+                Command Frame
+ ***********************************************/
+
+cmd_frame_t = {
+    uint8                   = 221
+    status                  uint8 | [165, 90]
+    command                 uint8
+    @data_sz uint8
+    data n_of @data_sz      uint8
+    checksum                uint8
+    uint8                   = 119
+}
+
+/***********************************************
+                Response Data
+ ***********************************************/
+protection_status_t = {
+    uint3                   = 0
+    mosfet_software_lock    uint1
+    ic_frontend_error       uint1
+    short_circuit           uint1
+    discharge_overcurrent   uint1
+    charge_overcurrent      uint1
+    discharge_low_temp      uint1
+    discharge_high_temp     uint1
+    charge_low_temp         uint1
+    charge_high_temp        uint1
+    battery_under_voltage   uint1
+    battery_over_voltage    uint1
+    cell_under_voltage      uint1
+    cell_over_voltage       uint1
+}
+
+fet_control_status_t = {
+    uint14                  = 0
+    is_charging             uint1
+    is_discharging          uint1
+}
+
+basic_status_resp_t = {
+    total_voltage       uint16
+    current             uint16
+    residual_capacity   uint16
+    nominal_capacity    uint16
+    cycle_life          uint16
+    product_date        uint16
+    balance_status      uint16
+    balance_status_high uint16
+    protection_status   protection_status_t
+    version             uint8
+    rsoc                uint8
+    fet_control_status  fet_control_status_t
+    cell_series_count   uint8
+    @ntc_count          uint8
+    ntc_temperature n_of @ntc_count uint16
+}
+
+cell_voltage_resp_t = {
+    @cell_count             uint8
+    cell_voltage n_of @cell_count uint16
+}
