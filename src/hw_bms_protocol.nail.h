@@ -2,19 +2,19 @@
  #include <string.h>
 #include <assert.h>
 enum N_types {_NAIL_NULL};
-typedef struct cmd_frame_t cmd_frame_t;
+typedef struct cmd_resp_t cmd_resp_t;
 typedef struct protection_status_t protection_status_t;
 typedef struct fet_control_status_t fet_control_status_t;
 typedef struct basic_status_resp_t basic_status_resp_t;
 typedef struct cell_voltage_resp_t cell_voltage_resp_t;
-struct cmd_frame_t{
-uint8_t status;
+struct cmd_resp_t{
 uint8_t command;
+uint8_t state;
 struct {
 uint8_t*elem;
  size_t count;
 } data;
-uint8_t checksum;
+uint16_t checksum;
 }
 ;
 struct protection_status_t{
@@ -117,14 +117,15 @@ const uint8_t * NailOutStream_buffer(NailOutStream *str,size_t *siz);
 extern int NailOutStream_grow(NailOutStream *stream, size_t count);
 
 #define n_fail(i) __builtin_expect(i,0)
-cmd_frame_t*parse_cmd_frame_t(NailArena *arena, const uint8_t *data, size_t size);
+cmd_resp_t*parse_cmd_resp_t(NailArena *arena, const uint8_t *data, size_t size);
 protection_status_t*parse_protection_status_t(NailArena *arena, const uint8_t *data, size_t size);
 fet_control_status_t*parse_fet_control_status_t(NailArena *arena, const uint8_t *data, size_t size);
 basic_status_resp_t*parse_basic_status_resp_t(NailArena *arena, const uint8_t *data, size_t size);
 cell_voltage_resp_t*parse_cell_voltage_resp_t(NailArena *arena, const uint8_t *data, size_t size);
+extern int checksum_parse(NailArena *tmp,NailStream *str_checksum,NailStream *current);
 
-int gen_cmd_frame_t(NailArena *tmp_arena,NailOutStream *out,cmd_frame_t * val);
-int gen_protection_status_t(NailArena *tmp_arena,NailOutStream *out,protection_status_t * val);
+int gen_cmd_resp_t(NailArena *tmp_arena,NailOutStream *out,cmd_resp_t * val);
+extern  int checksum_generate(NailArena *tmp_arena,NailOutStream *str_checksum,NailOutStream *str_current);int gen_protection_status_t(NailArena *tmp_arena,NailOutStream *out,protection_status_t * val);
 int gen_fet_control_status_t(NailArena *tmp_arena,NailOutStream *out,fet_control_status_t * val);
 int gen_basic_status_resp_t(NailArena *tmp_arena,NailOutStream *out,basic_status_resp_t * val);
 int gen_cell_voltage_resp_t(NailArena *tmp_arena,NailOutStream *out,cell_voltage_resp_t * val);

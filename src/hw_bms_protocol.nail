@@ -4,13 +4,14 @@
                 Command Frame
  ***********************************************/
 
-cmd_frame_t = {
+cmd_resp_t = {
     uint8                   = 221
-    status                  uint8 | [165, 90]
     command                 uint8
+    state                   uint8 | [0, 128]
     @data_sz uint8
     data n_of @data_sz      uint8
-    checksum                uint8
+    $checksum transform checksum ($current)
+    checksum apply $checksum uint16
     uint8                   = 119
 }
 

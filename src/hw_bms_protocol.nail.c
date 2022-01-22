@@ -381,22 +381,23 @@ void n_arena_restore(NailArena *arena, NailArenaPos p) {
 
 
 
-static pos peg_cmd_frame_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
+extern int checksum_parse(NailArena *tmp,NailStream *str_checksum,NailStream *current);
+static pos peg_cmd_resp_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
 static pos peg_protection_status_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
 static pos peg_fet_control_status_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
 static pos peg_basic_status_resp_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
 static pos peg_cell_voltage_resp_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
-static pos peg_cmd_frame_t(NailArena *tmp_arena,n_trace *trace, NailStream *str_current){
+static pos peg_cmd_resp_t(NailArena *tmp_arena,n_trace *trace, NailStream *str_current){
 pos i;
 if(parser_fail(stream_check(str_current,8))) {goto fail;}
 if( read_unsigned_bits(str_current,8)!= 221){stream_backup(str_current,8);goto fail;}if(parser_fail(n_tr_const(trace,str_current))){goto fail;}
 if(parser_fail(stream_check(str_current,8))) {goto fail;}
+stream_advance(str_current,8);
+if(parser_fail(stream_check(str_current,8))) {goto fail;}
 {
  uint64_t val = read_unsigned_bits(str_current,8);
-if(val!=165 && val!=90){stream_backup(str_current,8);goto fail;}
+if(val!=0 && val!=128){stream_backup(str_current,8);goto fail;}
 }
-if(parser_fail(stream_check(str_current,8))) {goto fail;}
-stream_advance(str_current,8);
 ; 
  pos trace_data_sz = n_trace_getpos(trace);
 uint8_t dep_data_sz;
@@ -412,9 +413,20 @@ pos count= dep_data_sz;
 pos i1=0;for( i1=0;i1<count;i1++){if(parser_fail(stream_check(str_current,8))) {goto fail;}
 stream_advance(str_current,8);
 }n_tr_write_many(trace,many,count);
-}/*/LENGTH*/if(parser_fail(stream_check(str_current,8))) {goto fail;}
-stream_advance(str_current,8);
-if(parser_fail(stream_check(str_current,8))) {goto fail;}
+}/*/LENGTH*/;
+NailStream str_checksum;
+if(checksum_parse(tmp_arena, &str_checksum,str_current)) {goto fail;}n_tr_stream(trace,str_current);{/*APPLY*/NailStream  * orig_str = str_current;
+str_current = &str_checksum;
+n_tr_stream(trace, str_current);
+if(parser_fail(stream_check(str_current,16))) {goto fail_apply_0;}
+stream_advance(str_current,16);
+goto succ_apply_0;
+fail_apply_0:
+str_current = orig_str; 
+goto fail;
+succ_apply_0:
+str_current = orig_str;
+}if(parser_fail(stream_check(str_current,8))) {goto fail;}
 if( read_unsigned_bits(str_current,8)!= 119){stream_backup(str_current,8);goto fail;}if(parser_fail(n_tr_const(trace,str_current))){goto fail;}
 return 0;
 fail:
@@ -534,12 +546,12 @@ fail:
 }
 
 
-static pos bind_cmd_frame_t(NailArena *arena,cmd_frame_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_protection_status_t(NailArena *arena,protection_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_fet_control_status_t(NailArena *arena,fet_control_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_basic_status_resp_t(NailArena *arena,basic_status_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_cell_voltage_resp_t(NailArena *arena,cell_voltage_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);
-static int bind_cmd_frame_t(NailArena *arena,cmd_frame_t*out,NailStream *stream, pos **trace ,  pos * trace_begin){
+static pos bind_cmd_resp_t(NailArena *arena,cmd_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_protection_status_t(NailArena *arena,protection_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_fet_control_status_t(NailArena *arena,fet_control_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_basic_status_resp_t(NailArena *arena,basic_status_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_cell_voltage_resp_t(NailArena *arena,cell_voltage_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);
+static int bind_cmd_resp_t(NailArena *arena,cmd_resp_t*out,NailStream *stream, pos **trace ,  pos * trace_begin){
  pos *tr = *trace;stream_reposition(stream,*tr);
 tr++;
-out->status=read_unsigned_bits(stream,8);
 out->command=read_unsigned_bits(stream,8);
+out->state=read_unsigned_bits(stream,8);
 stream_reposition(stream,*tr);
 tr++;
 { /*ARRAY*/ 
@@ -549,19 +561,21 @@ out->data.elem= (typeof(out->data.elem))n_malloc(arena,out->data.count* sizeof(*
 for(pos i1=0;i1<out->data.count;i1++){out->data.elem[i1]=read_unsigned_bits(stream,8);
 }
 tr = trace_begin + save;
-}out->checksum=read_unsigned_bits(stream,8);
+}*stream = *(NailStream *)tr;tr+= sizeof(NailStream) / sizeof(*tr);{/*Apply*/ NailStream *original_stream = stream;
+;stream = (NailStream *)tr;tr+= sizeof(NailStream) / sizeof(*tr);out->checksum=read_unsigned_bits(stream,16);
+stream = original_stream;}
 stream_reposition(stream,*tr);
 tr++;
-*trace = tr;return 0;}cmd_frame_t*parse_cmd_frame_t(NailArena *arena, const uint8_t *data, size_t size){
+*trace = tr;return 0;}cmd_resp_t*parse_cmd_resp_t(NailArena *arena, const uint8_t *data, size_t size){
 NailStream stream = {.data = data, .pos= 0, .size = size, .bit_offset = 0};
 NailArena tmp_arena;NailArena_init(&tmp_arena, 4096, arena->error_ret);n_trace trace;
 pos *tr_ptr;
  pos pos;
-cmd_frame_t* retval;
+cmd_resp_t* retval;
 n_trace_init(&trace,4096,4096);
-if(parser_fail(peg_cmd_frame_t(&tmp_arena,&trace,&stream))) goto fail;if(stream.pos != stream.size) goto fail; retval =  (typeof(retval))n_malloc(arena,sizeof(*retval));
+if(parser_fail(peg_cmd_resp_t(&tmp_arena,&trace,&stream))) goto fail;if(stream.pos != stream.size) goto fail; retval =  (typeof(retval))n_malloc(arena,sizeof(*retval));
 stream.pos = 0;
-tr_ptr = trace.trace;if(bind_cmd_frame_t(arena,retval,&stream,&tr_ptr,trace.trace) < 0) goto fail;
+tr_ptr = trace.trace;if(bind_cmd_resp_t(arena,retval,&stream,&tr_ptr,trace.trace) < 0) goto fail;
 out: n_trace_release(&trace);
 NailArena_release(&tmp_arena);return retval;fail: retval = NULL; goto out;}
 static int bind_protection_status_t(NailArena *arena,protection_status_t*out,NailStream *stream, pos **trace ,  pos * trace_begin){
@@ -664,14 +678,19 @@ stream.pos = 0;
 tr_ptr = trace.trace;if(bind_cell_voltage_resp_t(arena,retval,&stream,&tr_ptr,trace.trace) < 0) goto fail;
 out: n_trace_release(&trace);
 NailArena_release(&tmp_arena);return retval;fail: retval = NULL; goto out;}
-int gen_cmd_frame_t(NailArena *tmp_arena,NailOutStream *out,cmd_frame_t * val);
-int gen_protection_status_t(NailArena *tmp_arena,NailOutStream *out,protection_status_t * val);
+int gen_cmd_resp_t(NailArena *tmp_arena,NailOutStream *out,cmd_resp_t * val);
+extern  int checksum_generate(NailArena *tmp_arena,NailOutStream *str_checksum,NailOutStream *str_current);int gen_protection_status_t(NailArena *tmp_arena,NailOutStream *out,protection_status_t * val);
 int gen_fet_control_status_t(NailArena *tmp_arena,NailOutStream *out,fet_control_status_t * val);
 int gen_basic_status_resp_t(NailArena *tmp_arena,NailOutStream *out,basic_status_resp_t * val);
 int gen_cell_voltage_resp_t(NailArena *tmp_arena,NailOutStream *out,cell_voltage_resp_t * val);
-int gen_cmd_frame_t(NailArena *tmp_arena,NailOutStream *str_current,cmd_frame_t * val){if(parser_fail(NailOutStream_write(str_current,221,8))) return -1;if(val->status!=165 && val->status!=90){return -1;}if(parser_fail(NailOutStream_write(str_current,val->status,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->command,8))) return -1;uint8_t dep_data_sz;NailOutStreamPos rewind_data_sz=NailOutStream_getpos(str_current);NailOutStream_write(str_current,0,8);for(int i0=0;i0<val->data.count;i0++){if(parser_fail(NailOutStream_write(str_current,val->data.elem[i0],8))) return -1;}dep_data_sz=val->data.count;if(parser_fail(NailOutStream_write(str_current,val->checksum,8))) return -1;if(parser_fail(NailOutStream_write(str_current,119,8))) return -1;{/*Context-rewind*/
+int gen_cmd_resp_t(NailArena *tmp_arena,NailOutStream *str_current,cmd_resp_t * val){if(parser_fail(NailOutStream_write(str_current,221,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->command,8))) return -1;if(val->state!=0 && val->state!=128){return -1;}if(parser_fail(NailOutStream_write(str_current,val->state,8))) return -1;uint8_t dep_data_sz;NailOutStreamPos rewind_data_sz=NailOutStream_getpos(str_current);NailOutStream_write(str_current,0,8);for(int i0=0;i0<val->data.count;i0++){if(parser_fail(NailOutStream_write(str_current,val->data.elem[i0],8))) return -1;}dep_data_sz=val->data.count;NailOutStream str_checksum;
+if(parser_fail(NailOutStream_init(&str_checksum,4096))) {return -1;}
+{/*APPLY*/NailOutStream  * orig_str = str_current;
+str_current =&str_checksum;if(parser_fail(NailOutStream_write(str_current,val->checksum,16))) return -1;str_current = orig_str;}if(parser_fail(NailOutStream_write(str_current,119,8))) return -1;if(parser_fail(checksum_generate(tmp_arena, &str_checksum,str_current))){return -1;}{ NailOutStreamPos t_rewind_eot =NailOutStream_getpos(str_current);
+ NailOutStream_reposition(str_current, t_rewind_eot);
+ }{/*Context-rewind*/
  NailOutStreamPos  end_of_struct= NailOutStream_getpos(str_current);
-NailOutStream_reposition(str_current, rewind_data_sz);NailOutStream_write(str_current,dep_data_sz,8);NailOutStream_reposition(str_current, end_of_struct);}return 0;}int gen_protection_status_t(NailArena *tmp_arena,NailOutStream *str_current,protection_status_t * val){if(parser_fail(NailOutStream_write(str_current,0,3))) return -1;if(parser_fail(NailOutStream_write(str_current,val->mosfet_software_lock,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->ic_frontend_error,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->short_circuit,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->discharge_overcurrent,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->charge_overcurrent,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->discharge_low_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->discharge_high_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->charge_low_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->charge_high_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->battery_under_voltage,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->battery_over_voltage,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->cell_under_voltage,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->cell_over_voltage,1))) return -1;{/*Context-rewind*/
+NailOutStream_reposition(str_current, rewind_data_sz);NailOutStream_write(str_current,dep_data_sz,8);NailOutStream_release(&str_checksum);NailOutStream_reposition(str_current, end_of_struct);}return 0;}int gen_protection_status_t(NailArena *tmp_arena,NailOutStream *str_current,protection_status_t * val){if(parser_fail(NailOutStream_write(str_current,0,3))) return -1;if(parser_fail(NailOutStream_write(str_current,val->mosfet_software_lock,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->ic_frontend_error,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->short_circuit,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->discharge_overcurrent,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->charge_overcurrent,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->discharge_low_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->discharge_high_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->charge_low_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->charge_high_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->battery_under_voltage,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->battery_over_voltage,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->cell_under_voltage,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->cell_over_voltage,1))) return -1;{/*Context-rewind*/
  NailOutStreamPos  end_of_struct= NailOutStream_getpos(str_current);
 NailOutStream_reposition(str_current, end_of_struct);}return 0;}int gen_fet_control_status_t(NailArena *tmp_arena,NailOutStream *str_current,fet_control_status_t * val){if(parser_fail(NailOutStream_write(str_current,0,6))) return -1;if(parser_fail(NailOutStream_write(str_current,val->is_charging,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->is_discharging,1))) return -1;{/*Context-rewind*/
  NailOutStreamPos  end_of_struct= NailOutStream_getpos(str_current);

@@ -71,6 +71,9 @@ static NailArena                g_rx_arena;
  **********************/
 static void send_request( uint8_t cmd );
 static uint16_t calc_checksum( uint8_t * data );
+int checksum_parse(NailArena *tmp,NailStream *str_checksum,NailStream *current);
+int checksum_generate(NailArena *tmp_arena,NailOutStream *str_checksum,NailOutStream *str_current);
+
 
 _Noreturn static void bms_parse_task( void * params );
 void bms_request( TimerHandle_t xTimer );
@@ -115,75 +118,96 @@ void hw_bms_stop( void )
 
 _Noreturn static void bms_parse_task( void * params )
 {
+    bool        success;
     uint8_t     bms_data[RX_BUF_SZ];
     int         data_sz = 0;
+    cmd_resp_t* cmd_resp;
     jmp_buf     err;
 
     // Initialize Parser
-    NailArena_init(&g_rx_arena, 512, &err);
+    NailArena_init(&g_rx_arena, 1024, &err);
 
     for(;;) {
+        //TODO We need to be smarter about reading data here, occasionally, we'll read two packets at once
 
         // Read Response
         data_sz = uart_read_bytes( UART_NUM_1, bms_data, RX_BUF_SZ, 1000 / portTICK_RATE_MS );
-        if( data_sz <= 0 ) {
+        success = ( data_sz > 0 );
+
+        if( !success ) {
             continue;
         }
-
         // TODO: Before we parse it, validate checksum
 
-        switch( bms_data[CMD_IDX] ) {
+        for( int idx = 0; idx < data_sz; idx++ ) {
+            printf("0x%02X, ", bms_data[idx]);
+        }
+        printf("\n");
 
-            case CMD_BASIC_INFO: {
-                basic_status_resp_t * resp;
+        // Parse Command Response
+        if( success ) {
+            cmd_resp = parse_cmd_resp_t( &g_rx_arena, bms_data, data_sz );
+            success = (NULL != cmd_resp);
+        }
 
-                resp = parse_basic_status_resp_t( &g_rx_arena, &bms_data[DATA_IDX], bms_data[SIZE_IDX] );
+        printf("success? %d\n", success);
 
-                if( resp ) {
-                    PUB_DBL("bms.total_voltage", (double)(resp->total_voltage * 0.01));
-                    PUB_DBL("bms.current", (double)(resp->current * 0.01));
-                    PUB_DBL("bms.residual_capacity", (double)(resp->residual_capacity * 0.01));
-                    PUB_DBL("bms.nominal_capacity", (double)(resp->nominal_capacity * 0.01));
-                    PUB_INT("bms.cycle_life", resp->cycle_life);
-                    PUB_INT("bms.balance_status", (resp->balance_status_high << 16) | resp->balance_status);
+        // Handle Command
+        if( success ) {
+            switch( cmd_resp->command ) {
 
-                    PUB_BOOL("bms.protection_status.mosfet_software_lock", resp->protection_status.mosfet_software_lock);
-                    PUB_BOOL("bms.protection_status.ic_frontend_error", resp->protection_status.ic_frontend_error);
-                    PUB_BOOL("bms.protection_status.short_circuit", resp->protection_status.short_circuit);
-                    PUB_BOOL("bms.protection_status.discharge_overcurrent", resp->protection_status.discharge_overcurrent);
-                    PUB_BOOL("bms.protection_status.charge_overcurrent", resp->protection_status.charge_overcurrent);
-                    PUB_BOOL("bms.protection_status.discharge_low_temp", resp->protection_status.discharge_low_temp);
-                    PUB_BOOL("bms.protection_status.discharge_high_temp", resp->protection_status.discharge_high_temp);
-                    PUB_BOOL("bms.protection_status.charge_low_temp", resp->protection_status.charge_low_temp);
-                    PUB_BOOL("bms.protection_status.charge_high_temp", resp->protection_status.charge_high_temp);
-                    PUB_BOOL("bms.protection_status.battery_under_voltage", resp->protection_status.battery_under_voltage);
-                    PUB_BOOL("bms.protection_status.battery_over_voltage", resp->protection_status.battery_over_voltage);
-                    PUB_BOOL("bms.protection_status.cell_under_voltage", resp->protection_status.cell_under_voltage);
-                    PUB_BOOL("bms.protection_status.cell_over_voltage", resp->protection_status.cell_over_voltage);
+                case CMD_BASIC_INFO: {
+                    basic_status_resp_t * resp;
 
-                    PUB_INT("bms.version", resp->version);
-                    PUB_INT("bms.rsoc", resp->rsoc);
-                    PUB_BOOL("bms.fet_control_status.is_charging", resp->fet_control_status.is_charging);
-                    PUB_BOOL("bms.fet_control_status.is_discharging", resp->fet_control_status.is_discharging);
-                    PUB_INT("bms.cell_series_count", resp->cell_series_count);
+                    resp = parse_basic_status_resp_t( &g_rx_arena, cmd_resp->data.elem, cmd_resp->data.count );
+                    success = ( NULL != resp );
 
-                    for(int idx = 0; idx < resp->ntc_temperature.count; idx++) {
-                        char tag[32];
-                        snprintf(tag, sizeof(tag), "bms.ntc_temperature_%d", idx);
+                    if( success ) {
+                        PUB_DBL("bms.total_voltage", (double)(resp->total_voltage * 0.01));
+                        PUB_DBL("bms.current", (double)(resp->current * 0.01));
+                        PUB_DBL("bms.residual_capacity", (double)(resp->residual_capacity * 0.01));
+                        PUB_DBL("bms.nominal_capacity", (double)(resp->nominal_capacity * 0.01));
+                        PUB_INT("bms.cycle_life", resp->cycle_life);
+                        PUB_INT("bms.balance_status", (resp->balance_status_high << 16) | resp->balance_status);
 
-                        PUB_DBL(tag, (double)(resp->ntc_temperature.elem[idx] * 0.01));
+                        PUB_BOOL("bms.protection_status.mosfet_software_lock", resp->protection_status.mosfet_software_lock);
+                        PUB_BOOL("bms.protection_status.ic_frontend_error", resp->protection_status.ic_frontend_error);
+                        PUB_BOOL("bms.protection_status.short_circuit", resp->protection_status.short_circuit);
+                        PUB_BOOL("bms.protection_status.discharge_overcurrent", resp->protection_status.discharge_overcurrent);
+                        PUB_BOOL("bms.protection_status.charge_overcurrent", resp->protection_status.charge_overcurrent);
+                        PUB_BOOL("bms.protection_status.discharge_low_temp", resp->protection_status.discharge_low_temp);
+                        PUB_BOOL("bms.protection_status.discharge_high_temp", resp->protection_status.discharge_high_temp);
+                        PUB_BOOL("bms.protection_status.charge_low_temp", resp->protection_status.charge_low_temp);
+                        PUB_BOOL("bms.protection_status.charge_high_temp", resp->protection_status.charge_high_temp);
+                        PUB_BOOL("bms.protection_status.battery_under_voltage", resp->protection_status.battery_under_voltage);
+                        PUB_BOOL("bms.protection_status.battery_over_voltage", resp->protection_status.battery_over_voltage);
+                        PUB_BOOL("bms.protection_status.cell_under_voltage", resp->protection_status.cell_under_voltage);
+                        PUB_BOOL("bms.protection_status.cell_over_voltage", resp->protection_status.cell_over_voltage);
+
+                        PUB_INT("bms.version", resp->version);
+                        PUB_INT("bms.rsoc", resp->rsoc);
+                        PUB_BOOL("bms.fet_control_status.is_charging", resp->fet_control_status.is_charging);
+                        PUB_BOOL("bms.fet_control_status.is_discharging", resp->fet_control_status.is_discharging);
+                        PUB_INT("bms.cell_series_count", resp->cell_series_count);
+
+                        for(int idx = 0; idx < resp->ntc_temperature.count; idx++) {
+                            char tag[32];
+                            snprintf(tag, sizeof(tag), "bms.ntc_temperature_%d", idx);
+
+                            PUB_DBL(tag, (double)(resp->ntc_temperature.elem[idx] * 0.01));
+                        }
                     }
-                }
-            } break;
+                } break;
 
-            case CMD_CELL_VOLTAGES:
-                break;
+                case CMD_CELL_VOLTAGES:
+                    break;
 
-            case CMD_HARDWARE_VER:
-                break;
+                case CMD_HARDWARE_VER:
+                    break;
 
-            default:
-                break;
+                default:
+                    break;
+            }
         }
     }
 
@@ -218,10 +242,47 @@ static void send_request( uint8_t cmd )
     uart_write_bytes( UART_NUM_1, (const char *)cmd_data, sizeof(cmd_data) );
 }
 
+int checksum_parse(NailArena *tmp,NailStream *str_checksum, NailStream *current)
+{
+    NailStream    * stream_in;
+    NailStream    * stream_out;
+    bool            success;
+
+    // Rename I/O Streams
+    stream_in = current;
+    stream_out = str_checksum;
+
+    // Calculate Checksum Using Current Data
+    uint16_t cl_checksum = calc_checksum( stream_in->data );
+
+    // Get Checksum From Current Data
+    uint16_t rx_checksum = ( stream_in->data[stream_in->pos] << 8 ) | stream_in->data[stream_in->pos+1];
+
+    // Compare Checksums
+    success = ( cl_checksum == rx_checksum );
+
+    if( success ) {
+        stream_out->size = sizeof(uint16_t);
+        stream_out->pos = 0;
+        stream_out->data = stream_in->data + stream_in->pos;
+        stream_in->pos += sizeof(uint16_t);
+    }
+
+    return success ? 0 : -1;
+}
+
+int checksum_generate(NailArena *tmp_arena,NailOutStream *str_checksum,NailOutStream *str_current)
+{
+    printf("checksum_generate\n");
+    return 0;
+
+}
+
+
 static uint16_t calc_checksum( uint8_t * data )
 {
     uint16_t checksum = 0xFFFF;
-    uint8_t length = data[SIZE_IDX];
+    uint8_t length = data[3];
 
     // Subtract Command/Status
     checksum -= data[2];
@@ -238,4 +299,3 @@ static uint16_t calc_checksum( uint8_t * data )
 
     return checksum;
 }
-
