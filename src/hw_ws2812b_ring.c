@@ -112,9 +112,6 @@ void hw_ws2812b_ring_update()
 {
     xSemaphoreTake( g_led_tbl_lock, portMAX_DELAY );
 
-    // Reset LEDs
-    send_reset();
-
     // Send LEDs
     for( int idx = 0; idx < HW_WS2812B_RING_LED_CNT; idx++) {
         send_led( g_led_tbl[idx] );
