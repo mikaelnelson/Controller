@@ -115,7 +115,7 @@ void pulse_timer_fn( TimerHandle_t xTimer )
         double wheel_speed_mph = ( wheel_rpm * 15.5f * M_PI * 60 ) / (63360);
 
         PUB_INT("rpm_pulse_counter", rpm);
-        ESP_LOGI(TAG, "RPM Pulse Counter: %f (%f rpm, %f mph)", rpm, wheel_rpm, wheel_speed_mph);
+        // ESP_LOGI(TAG, "RPM Pulse Counter: %f (%f rpm, %f mph)", rpm, wheel_rpm, wheel_speed_mph);
     }
 
     // Clear Counter
