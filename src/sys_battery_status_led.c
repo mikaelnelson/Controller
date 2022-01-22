@@ -1,9 +1,11 @@
 /*********************
  *      INCLUDES
  *********************/
+#include <string.h>
 #include <stdbool.h>
-#include <pubsub.h>
 #include <math.h>
+
+#include <pubsub.h>
 
 #include "esp_system.h"
 #include "esp_log.h"
@@ -55,7 +57,7 @@ static const hw_ws2812b_ring_led_t  gc_led_green_25    = { .red = 0x00, .green =
  *     GLOBALS
  **********************/
 static state_t8    g_state = STATE_CHARGING;
-static uint8_t     g_battery_capacity = 100;
+static int         g_battery_capacity = BATTERY_CAPACITY_MAX;
 
 /**********************
  *      MACROS
@@ -89,7 +91,70 @@ void sys_battery_status_led_stop( void )
 
 _Noreturn static void battery_status_led_task( void *params )
 {
+    bool                is_charging = false;
+    double              total_capacity = 0;
+    double              current_capacity = 0;
+    ps_msg_t          * msg = NULL;
+    ps_subscriber_t   * s;
+
+    // Create Subscriber
+    s = ps_new_subscriber(5, NULL);
+
+    ps_subscribe( s, "bms.residual_capacity" );
+    ps_subscribe( s, "bms.nominal_capacity" );
+    ps_subscribe( s, "bms.current" );
+
     while(true) {
+        // Handle Messages
+        msg = ps_get(s, 20);
+
+        if( msg ) {
+            if(0 == strcmp("bms.residual_capacity", msg->topic)) {
+                current_capacity = msg->dbl_val;
+
+                current_capacity = 60;
+            }
+            else if(0 == strcmp("bms.nominal_capacity", msg->topic)) {
+                total_capacity = msg->dbl_val;
+
+                total_capacity = 100;
+            }
+            else if(0 == strcmp("bms.current", msg->topic)) {
+                // positive = discharging, negative = charging
+                is_charging = ( msg->dbl_val >= 0.0f );
+            }
+
+            // Calculate Battery Capacity
+            if( total_capacity > 0 ) {
+                g_battery_capacity = ( 100 * current_capacity ) / ( total_capacity );
+
+                if( g_battery_capacity > BATTERY_CAPACITY_MAX ) {
+                    g_battery_capacity = BATTERY_CAPACITY_MAX;
+                }
+
+                if( g_battery_capacity < BATTERY_CAPACITY_MIN ) {
+                    g_battery_capacity = BATTERY_CAPACITY_MIN;
+                }
+            }
+
+            ps_unref_msg(msg);
+        }
+
+
+        // Determine State
+        if( 0 == total_capacity ) {
+            // If Total Capacity is 0, Error
+            g_state = STATE_ERROR;
+        }
+        else if( is_charging ) {
+            // In A Charging State
+            g_state = STATE_CHARGING;
+        }
+        else {
+            // In a Discharging State
+            g_state = STATE_CAPACITY;
+        }
+
         // Handle State Machine
         switch(g_state) {
             default:
@@ -103,15 +168,9 @@ _Noreturn static void battery_status_led_task( void *params )
 
             case STATE_CAPACITY:
                 battery_status_capacity_update();
-                vTaskDelay( 1000/portTICK_PERIOD_MS );
-                g_battery_capacity--;
-                if(g_battery_capacity == BATTERY_CAPACITY_MIN) {
-                    g_battery_capacity = BATTERY_CAPACITY_MAX;
-                }
                 break;
 
             case STATE_CHARGING:
-                vTaskDelay( 10/portTICK_PERIOD_MS );
                 battery_status_charging_update();
                 break;
 
@@ -120,6 +179,8 @@ _Noreturn static void battery_status_led_task( void *params )
                 break;
         }
     }
+
+    ps_free_subscriber(s);
 }
 
 
@@ -155,20 +216,13 @@ void battery_status_charging_update( void )
 
     // Fill Fade Green LED
     if( (led_max - 1) < HW_WS2812B_RING_LED_CNT ) {
-
         uint32_t time = pdTICKS_TO_MS( xTaskGetTickCount() );
 
-
-
         float time_chunk = ( ( time % 2000 ) / 2000.0f);
-        printf("tm_chunk: %f\n", time_chunk);
         float sine = sin(M_PI * time_chunk );
-        printf("sine: %f\n", sine);
 
         charge_led.green = 0x20 + ( 0xDF * sine );
         hw_ws2812b_ring_set_led( (led_max - 1), charge_led );
-
-        printf("green: %d\n", charge_led.green);
     }
 
     // Clear remaining LEDs
@@ -181,5 +235,22 @@ void battery_status_charging_update( void )
 
 void battery_status_error_update( void )
 {
+    hw_ws2812b_ring_led_t  color;
 
+    color.red = 5;
+    color.blue = 0x00;
+    color.green = 0x00;
+
+    uint32_t time = pdTICKS_TO_MS( xTaskGetTickCount() );
+
+    float time_chunk = ( ( time % 2000 ) / 2000.0f);
+    float sine = sin(M_PI * time_chunk );
+
+    color.red = 0x20 + ( 0xDF * sine );
+
+    for( int idx = 0; idx < HW_WS2812B_RING_LED_CNT; idx++ ) {
+        hw_ws2812b_ring_set_led( idx, color );
+    }
+
+    hw_ws2812b_ring_update();
 }
