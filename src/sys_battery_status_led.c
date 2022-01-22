@@ -111,13 +111,9 @@ _Noreturn static void battery_status_led_task( void *params )
         if( msg ) {
             if(0 == strcmp("bms.residual_capacity", msg->topic)) {
                 current_capacity = msg->dbl_val;
-
-                current_capacity = 60;
             }
             else if(0 == strcmp("bms.nominal_capacity", msg->topic)) {
                 total_capacity = msg->dbl_val;
-
-                total_capacity = 100;
             }
             else if(0 == strcmp("bms.current", msg->topic)) {
                 // positive = discharging, negative = charging
