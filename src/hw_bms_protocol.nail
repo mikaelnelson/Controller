@@ -35,7 +35,7 @@ protection_status_t = {
 }
 
 fet_control_status_t = {
-    uint14                  = 0
+    uint6                   = 0
     is_charging             uint1
     is_discharging          uint1
 }

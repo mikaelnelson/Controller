@@ -15,8 +15,6 @@
 #include "freertos/task.h"
 #include "freertos/timers.h"
 
-#include "utl_count.h"
-
 #include "hw_config.h"
 #include "hw_bms.h"
 #include "hw_bms_protocol.nail.h"
