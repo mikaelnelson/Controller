@@ -71,8 +71,10 @@ static NailArena                g_rx_arena;
  **********************/
 static void send_request( uint8_t cmd );
 static uint16_t calc_checksum( uint8_t * data );
-int checksum_parse(NailArena *tmp,NailStream *str_checksum,NailStream *current);
-int checksum_generate(NailArena *tmp_arena,NailOutStream *str_checksum,NailOutStream *str_current);
+static uint16_t read_checksum( uint8_t * data );
+
+int checksum_generate(NailArena *tmp_arena, NailOutStream *str_current, uint16_t *checksum);
+int checksum_parse( NailArena *tmp, NailStream *current, uint16_t *checksum );
 
 
 _Noreturn static void bms_parse_task( void * params );
@@ -137,12 +139,6 @@ _Noreturn static void bms_parse_task( void * params )
         if( !success ) {
             continue;
         }
-        // TODO: Before we parse it, validate checksum
-
-        for( int idx = 0; idx < data_sz; idx++ ) {
-            printf("0x%02X, ", bms_data[idx]);
-        }
-        printf("\n");
 
         // Parse Command Response
         if( success ) {
@@ -150,12 +146,9 @@ _Noreturn static void bms_parse_task( void * params )
             success = (NULL != cmd_resp);
         }
 
-        printf("success? %d\n", success);
-
         // Handle Command
         if( success ) {
             switch( cmd_resp->command ) {
-
                 case CMD_BASIC_INFO: {
                     basic_status_resp_t * resp;
 
@@ -242,47 +235,48 @@ static void send_request( uint8_t cmd )
     uart_write_bytes( UART_NUM_1, (const char *)cmd_data, sizeof(cmd_data) );
 }
 
-int checksum_parse(NailArena *tmp,NailStream *str_checksum, NailStream *current)
+int checksum_generate(NailArena *tmp_arena, NailOutStream *str_current, uint16_t *checksum)
 {
     NailStream    * stream_in;
-    NailStream    * stream_out;
+
+    // Rename I/O Streams
+    stream_in = str_current;
+
+    // Calculate Checksum from stream_in
+    *checksum = calc_checksum( stream_in->data );
+
+    return 0;
+}
+
+int checksum_parse( NailArena *tmp, NailStream *current, uint16_t *checksum )
+{
+    NailStream    * stream_in;
     bool            success;
 
     // Rename I/O Streams
     stream_in = current;
-    stream_out = str_checksum;
 
     // Calculate Checksum Using Current Data
     uint16_t cl_checksum = calc_checksum( stream_in->data );
 
     // Get Checksum From Current Data
-    uint16_t rx_checksum = ( stream_in->data[stream_in->pos] << 8 ) | stream_in->data[stream_in->pos+1];
+    uint16_t rx_checksum = read_checksum(stream_in->data);
 
     // Compare Checksums
     success = ( cl_checksum == rx_checksum );
 
     if( success ) {
-        stream_out->size = sizeof(uint16_t);
-        stream_out->pos = 0;
-        stream_out->data = stream_in->data + stream_in->pos;
-        stream_in->pos += sizeof(uint16_t);
+        *checksum = cl_checksum;
     }
 
     return success ? 0 : -1;
-}
-
-int checksum_generate(NailArena *tmp_arena,NailOutStream *str_checksum,NailOutStream *str_current)
-{
-    printf("checksum_generate\n");
-    return 0;
-
 }
 
 
 static uint16_t calc_checksum( uint8_t * data )
 {
     uint16_t checksum = 0xFFFF;
-    uint8_t length = data[3];
+    uint8_t length = data[SIZE_IDX];
 
     // Subtract Command/Status
     checksum -= data[2];
@@ -292,10 +286,22 @@ static uint16_t calc_checksum( uint8_t * data )
 
     // Subtract Data
     for( int i = 0; i < length; i++ ) {
-        checksum -= data[4 + i];
+        checksum -= data[DATA_IDX + i];
     }
 
     checksum += 1;
+
+    return checksum;
+}
+
+
+
+static uint16_t read_checksum( uint8_t * data )
+{
+    uint16_t checksum;
+    uint8_t length = data[SIZE_IDX];
+
+    checksum = data[DATA_IDX + length] << 8 | data[DATA_IDX + length + 1];
 
     return checksum;
 }

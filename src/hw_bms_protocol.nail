@@ -8,10 +8,20 @@ cmd_resp_t = {
     uint8                   = 221
     command                 uint8
     state                   uint8 | [0, 128]
-    @data_sz uint8
+    @data_sz                uint8
     data n_of @data_sz      uint8
-    $checksum transform checksum ($current)
-    checksum apply $checksum uint16
+    @checksum               uint16
+    transform checksum ($current @checksum)
+    uint8                   = 119
+}
+
+cmd_req_t = {
+    uint8                   = 221
+    uint8                   = 165
+    command                 uint8
+    uint8                   = 0
+    @checksum               uint16
+    transform checksum ($current @checksum)
     uint8                   = 119
 }
 
