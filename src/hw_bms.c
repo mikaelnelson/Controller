@@ -24,33 +24,18 @@
  *********************/
 #define TAG                 "HW_BMS"
 
-#define START_IDX           0
-#define CMD_IDX             1
-#define STATE_IDX           2
-#define SIZE_IDX            3
-#define DATA_IDX            4
-
-#define HEADER_SZ           ( 4 )
-#define FOOTER_SZ           ( 3 )
-#define DATA_MAX_SZ         ( 256 )
-#define RX_BUF_SZ           ( HEADER_SZ + FOOTER_SZ + DATA_MAX_SZ )
-
-#define CMD_BUF_SZ          ( HEADER_SZ + FOOTER_SZ )
-
-#define START_BYTE          0xDD
-#define WRITE_BYTE          0x5A
-#define READ_BYTE           0xA5
-#define END_BYTE            0x77
-
-enum {
-    CMD_BASIC_INFO          = 0x03,
-    CMD_CELL_VOLTAGES       = 0x04,
-    CMD_HARDWARE_VER        = 0x05
-    };
+#define RX_BUF_SZ           ( 128 )
+#define CMD_BUF_SZ          ( 16 )
 
 /**********************
  *      TYPEDEFS
  **********************/
+
+typedef uint8_t cmd_t; enum {
+    CMD_BASIC_INFO          = 0x03,
+    CMD_CELL_VOLTAGES       = 0x04,
+    CMD_HARDWARE_VER        = 0x05
+    };
 
 /**********************
  *      MACROS
@@ -61,6 +46,7 @@ enum {
  **********************/
 static TimerHandle_t            g_bms_request_timer;
 static NailArena                g_rx_arena;
+static NailArena                g_tx_arena;
 
 /**********************
  *     CONSTANTS
@@ -70,12 +56,6 @@ static NailArena                g_rx_arena;
  *    PROTOTYPES
  **********************/
 static void send_request( uint8_t cmd );
-static uint16_t calc_checksum( uint8_t * data );
-static uint16_t read_checksum( uint8_t * data );
-
-int checksum_generate(NailArena *tmp_arena, NailOutStream *str_current, uint16_t *checksum);
-int checksum_parse( NailArena *tmp, NailStream *current, uint16_t *checksum );
-
 
 _Noreturn static void bms_parse_task( void * params );
 void bms_request( TimerHandle_t xTimer );
@@ -106,6 +86,12 @@ void hw_bms_init(void)
 
 void hw_bms_start( void )
 {
+    jmp_buf     err;
+
+    // Initialize Nail Arenas
+    NailArena_init(&g_tx_arena, 128, &err);
+    NailArena_init(&g_rx_arena, 128, &err);
+
     //Create a task to handler UART event from ISR
     xTaskCreate( bms_parse_task, "bms_parse_task", 4 * 1024, NULL, 12, NULL );
 
@@ -115,7 +101,11 @@ void hw_bms_start( void )
 
 void hw_bms_stop( void )
 {
+    // TODO: Stop Timer & Thread
 
+    // Release Nail Arenas
+    NailArena_release( &g_tx_arena );
+    NailArena_release( &g_rx_arena );
 }
 
 _Noreturn static void bms_parse_task( void * params )
@@ -124,14 +114,8 @@ _Noreturn static void bms_parse_task( void * params )
     uint8_t     bms_data[RX_BUF_SZ];
     int         data_sz = 0;
     cmd_resp_t* cmd_resp;
-    jmp_buf     err;
-
-    // Initialize Parser
-    NailArena_init(&g_rx_arena, 1024, &err);
 
     for(;;) {
-        //TODO We need to be smarter about reading data here, occasionally, we'll read two packets at once
-
         // Read Response
         data_sz = uart_read_bytes( UART_NUM_1, bms_data, RX_BUF_SZ, 1000 / portTICK_RATE_MS );
         success = ( data_sz > 0 );
@@ -204,8 +188,6 @@ _Noreturn static void bms_parse_task( void * params )
         }
     }
 
-    NailArena_release( &g_rx_arena );
-
     vTaskDelete(NULL);
 }
 
@@ -216,92 +198,33 @@ void bms_request( TimerHandle_t xTimer )
 
 static void send_request( uint8_t cmd )
 {
-    uint8_t cmd_data[CMD_BUF_SZ];
-    uint16_t checksum;
+    bool            success;
+    NailOutStream   out_stream;
+    cmd_req_t       cmd_req;
+    const uint8_t * data_ptr = NULL;
+    size_t          data_sz;
 
-    //{ 0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77 };
-    cmd_data[0] = START_BYTE;
-    cmd_data[1] = READ_BYTE;
-    cmd_data[2] = cmd;
-    cmd_data[3] = 0;
+    success = ( 0 == NailOutStream_init( &out_stream, 32 ) );
 
-    checksum = calc_checksum( cmd_data );
-    cmd_data[4] = ( checksum >> 8 ) & 0x00FF;
-    cmd_data[5] = ( checksum >> 0 ) & 0x00FF;
+    // Setup Command
+    if( success ) {
+        cmd_req.command = cmd;
 
-    cmd_data[6] = END_BYTE;
+        // Generate Command
+        success = ( 0 == gen_cmd_req_t( &g_tx_arena, &out_stream, &cmd_req ) );
+    }
+
+    // Get Data
+    if( success ) {
+        data_ptr = NailOutStream_buffer( &out_stream, &data_sz );
+
+        success = ( NULL != data_ptr );
+    }
 
     // Send Request Command
-    uart_write_bytes( UART_NUM_1, (const char *)cmd_data, sizeof(cmd_data) );
-}
-
-int checksum_generate(NailArena *tmp_arena, NailOutStream *str_current, uint16_t *checksum)
-{
-    NailStream    * stream_in;
-
-    // Rename I/O Streams
-    stream_in = str_current;
-
-    // Calculate Checksum from stream_in
-    *checksum = calc_checksum( stream_in->data );
-
-    return 0;
-}
-
-int checksum_parse( NailArena *tmp, NailStream *current, uint16_t *checksum )
-{
-    NailStream    * stream_in;
-    bool            success;
-
-    // Rename I/O Streams
-    stream_in = current;
-
-    // Calculate Checksum Using Current Data
-    uint16_t cl_checksum = calc_checksum( stream_in->data );
-
-    // Get Checksum From Current Data
-    uint16_t rx_checksum = read_checksum(stream_in->data);
-
-    // Compare Checksums
-    success = ( cl_checksum == rx_checksum );
-
     if( success ) {
-        *checksum = cl_checksum;
+        uart_write_bytes( UART_NUM_1, (const char *)data_ptr, data_sz );
     }
 
-    return success ? 0 : -1;
-}
-
-
-static uint16_t calc_checksum( uint8_t * data )
-{
-    uint16_t checksum = 0xFFFF;
-    uint8_t length = data[SIZE_IDX];
-
-    // Subtract Command/Status
-    checksum -= data[2];
-
-    // Subtract Length
-    checksum -= length;
-
-    // Subtract Data
-    for( int i = 0; i < length; i++ ) {
-        checksum -= data[DATA_IDX + i];
-    }
-
-    checksum += 1;
-
-    return checksum;
-}
-
-
-
-static uint16_t read_checksum( uint8_t * data )
-{
-    uint16_t checksum;
-    uint8_t length = data[SIZE_IDX];
-
-    checksum = data[DATA_IDX + length] << 8 | data[DATA_IDX + length + 1];
-
-    return checksum;
+    NailOutStream_release( &out_stream );
 }
