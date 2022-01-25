@@ -13,6 +13,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
+#include "freertos/semphr.h"
 
 #include "sys_battery_status_led.h"
 
@@ -53,11 +54,29 @@ static const hw_ws2812b_ring_led_t  gc_led_white    = { .red = 0xFF, .green = 0x
 static const hw_ws2812b_ring_led_t  gc_led_green_50    = { .red = 0x00, .green = 0x80, .blue = 0x00 };
 static const hw_ws2812b_ring_led_t  gc_led_green_25    = { .red = 0x00, .green = 0x40, .blue = 0x00 };
 
+static const lookup_entry_t gc_led_lookup_tbl[HW_WS2812B_RING_LED_CNT] =
+{
+    { 0,  8 },      /* LED 1 */
+    { 8,  16 },     /* LED 2 */
+    { 16, 24 },     /* LED 3 */
+    { 24, 32 },     /* LED 4 */
+    { 32, 40 },     /* LED 5 */
+    { 40, 48 },     /* LED 6 */
+    { 48, 56 },     /* LED 7 */
+    { 56, 64 },     /* LED 8 */
+    { 64, 72 },     /* LED 9 */
+    { 72, 80 },     /* LED 10 */
+    { 80, 88 },     /* LED 11 */
+    { 88, 100 },    /* LED 12 */
+};
+
 /**********************
  *     GLOBALS
  **********************/
-static state_t8    g_state = STATE_CHARGING;
-static int         g_battery_capacity = BATTERY_CAPACITY_MAX;
+static TimerHandle_t            g_battery_status_led_timer;
+static state_t8                 g_state = STATE_IDLE;
+static SemaphoreHandle_t        g_state_mutex;
+static int                      g_battery_capacity = BATTERY_CAPACITY_MAX;
 
 /**********************
  *      MACROS
@@ -71,17 +90,24 @@ static int         g_battery_capacity = BATTERY_CAPACITY_MAX;
  *    PROTOTYPES
  **********************/
 _Noreturn static void battery_status_led_task( void *params );
+void battery_status_led_timer( TimerHandle_t xTimer );
+
 void battery_status_capacity_update( void );
 void battery_status_charging_update( void );
 void battery_status_error_update( void );
 
 void sys_battery_status_led_init( void )
 {
+    g_state = STATE_IDLE;
+    g_state_mutex = xSemaphoreCreateMutex();
 }
 
 void sys_battery_status_led_start( void )
 {
     xTaskCreate( battery_status_led_task, "battery_status_led_task", 4 * 1024, NULL, 12, NULL );
+
+    g_battery_status_led_timer = xTimerCreate( "battery_status_led_timer", 33 / portTICK_RATE_MS, pdTRUE, NULL, battery_status_led_timer );
+    xTimerStart( g_battery_status_led_timer, 0 );
 }
 
 void sys_battery_status_led_stop( void )
@@ -106,7 +132,7 @@ _Noreturn static void battery_status_led_task( void *params )
 
     while(true) {
         // Handle Messages
-        msg = ps_get(s, 20);
+        msg = ps_get(s, -1);
 
         if( msg ) {
             if(0 == strcmp("bms.residual_capacity", msg->topic)) {
@@ -136,8 +162,9 @@ _Noreturn static void battery_status_led_task( void *params )
             ps_unref_msg(msg);
         }
 
-
         // Determine State
+        xSemaphoreTake(g_state_mutex, portMAX_DELAY);
+
         if( 0 == total_capacity ) {
             // If Total Capacity is 0, Error
             g_state = STATE_ERROR;
@@ -151,44 +178,66 @@ _Noreturn static void battery_status_led_task( void *params )
             g_state = STATE_CAPACITY;
         }
 
-        // Handle State Machine
-        switch(g_state) {
-            default:
-            case STATE_IDLE:
-                break;
-
-            case STATE_OFF:
-                hw_ws2812b_ring_reset();
-                g_state = STATE_IDLE;
-                break;
-
-            case STATE_CAPACITY:
-                battery_status_capacity_update();
-                break;
-
-            case STATE_CHARGING:
-                battery_status_charging_update();
-                break;
-
-            case STATE_ERROR:
-                battery_status_error_update();
-                break;
-        }
+        xSemaphoreGive( g_state_mutex );
     }
 
     ps_free_subscriber(s);
 }
 
+void battery_status_led_timer( TimerHandle_t xTimer )
+{
+    state_t8        state;
+
+    // Get State
+    xSemaphoreTake(g_state_mutex, portMAX_DELAY);
+    state = g_state;
+    xSemaphoreGive(g_state_mutex);
+
+    // Handle State Machine
+    switch( state ) {
+        default:
+        case STATE_IDLE:
+            break;
+
+        case STATE_OFF:
+            hw_ws2812b_ring_reset();
+            state = STATE_IDLE;
+            break;
+
+        case STATE_CAPACITY:
+            battery_status_capacity_update();
+            break;
+
+        case STATE_CHARGING:
+            battery_status_charging_update();
+            break;
+
+        case STATE_ERROR:
+            battery_status_error_update();
+            break;
+    }
+
+    // Update State
+    xSemaphoreTake(g_state_mutex, portMAX_DELAY);
+    g_state = state;
+    xSemaphoreGive(g_state_mutex);
+}
+
 
 void battery_status_capacity_update( void )
 {
-    int led_max = 0.5f + (float)( ( g_battery_capacity * HW_WS2812B_RING_LED_CNT ) / ( BATTERY_CAPACITY_MAX - BATTERY_CAPACITY_MIN ) );
+    int led_max = 0;
+    for( led_max = 0; led_max < HW_WS2812B_RING_LED_CNT; led_max++ ) {
+        if( ( g_battery_capacity >= gc_led_lookup_tbl[led_max].low ) && ( g_battery_capacity < gc_led_lookup_tbl[led_max].high ) ) {
+            break;
+        }
+    }
 
-    for( int idx = 0; ( idx < led_max ) && ( idx < HW_WS2812B_RING_LED_CNT ); idx++ ) {
+    for( int idx = 0; ( idx <= led_max ) && ( idx < HW_WS2812B_RING_LED_CNT ); idx++ ) {
         hw_ws2812b_ring_set_led( idx, gc_led_green );
     }
 
-    for( int idx = led_max; idx < HW_WS2812B_RING_LED_CNT; idx++ ) {
+    for( int idx = ( led_max + 1 ); idx < HW_WS2812B_RING_LED_CNT; idx++ ) {
         hw_ws2812b_ring_set_led( idx, gc_led_black );
     }
 
@@ -203,26 +252,32 @@ void battery_status_charging_update( void )
     charge_led.blue = 0x00;
     charge_led.green = 5;
 
-    int led_max = 0.5f + (float)( ( g_battery_capacity * HW_WS2812B_RING_LED_CNT ) / ( BATTERY_CAPACITY_MAX - BATTERY_CAPACITY_MIN ) );
+    int led_max = 0;
+    for( led_max = 0; led_max < HW_WS2812B_RING_LED_CNT; led_max++ ) {
+        if( ( g_battery_capacity >= gc_led_lookup_tbl[led_max].low ) && ( g_battery_capacity < gc_led_lookup_tbl[led_max].high ) ) {
+            break;
+        }
+    }
 
     // Fill 50% Green LED
-    for( int idx = 0; ( idx < ( led_max - 1 ) ) && ( idx < HW_WS2812B_RING_LED_CNT ); idx++ ) {
+    for( int idx = 0; idx < led_max && ( idx < HW_WS2812B_RING_LED_CNT ); idx++ ) {
         hw_ws2812b_ring_set_led( idx, charge_led );
     }
 
     // Fill Fade Green LED
-    if( (led_max - 1) < HW_WS2812B_RING_LED_CNT ) {
+    if( led_max < HW_WS2812B_RING_LED_CNT ) {
         uint32_t time = pdTICKS_TO_MS( xTaskGetTickCount() );
 
         float time_chunk = ( ( time % 2000 ) / 2000.0f);
         float sine = sin(M_PI * time_chunk );
 
         charge_led.green = 0x20 + ( 0xDF * sine );
-        hw_ws2812b_ring_set_led( (led_max - 1), charge_led );
+
+        hw_ws2812b_ring_set_led( led_max, charge_led );
     }
 
     // Clear remaining LEDs
-    for( int idx = led_max; idx < HW_WS2812B_RING_LED_CNT; idx++ ) {
+    for( int idx = led_max + 1; idx < HW_WS2812B_RING_LED_CNT; idx++ ) {
         hw_ws2812b_ring_set_led( idx, gc_led_black );
     }
 
