@@ -2,7 +2,7 @@
 
 #include "hw_rpm_pulse_counter.h"
 #include "hw_ws2812b_ring.h"
-#include "hw_bms.h"
+#include "hw_bms/hw_bms.h"
 
 #include "sys_battery_status_led.h"
 

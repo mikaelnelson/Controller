@@ -68,7 +68,7 @@ void hw_bms_init(void)
     /* Configure parameters of an UART driver,
     * communication pins and install the driver */
     uart_config_t uart_config = {
-            .baud_rate = 9600,
+            .baud_rate = BMS_BAUD_RATE,
             .data_bits = UART_DATA_8_BITS,
             .parity = UART_PARITY_DISABLE,
             .stop_bits = UART_STOP_BITS_1,
@@ -77,11 +77,11 @@ void hw_bms_init(void)
     };
 
     //Install UART driver, and get the queue.
-    ESP_ERROR_CHECK(uart_driver_install( UART_NUM_1, 2 * RX_BUF_SZ, 0, 0, NULL, 0) );
-    ESP_ERROR_CHECK(uart_param_config( UART_NUM_1, &uart_config) );
+    ESP_ERROR_CHECK(uart_driver_install( BMS_UART, 2 * RX_BUF_SZ, 0, 0, NULL, 0) );
+    ESP_ERROR_CHECK(uart_param_config( BMS_UART, &uart_config) );
 
     //Set UART pins (using UART0 default pins ie no changes.)
-    ESP_ERROR_CHECK(uart_set_pin(UART_NUM_1, BMS_TX, BMS_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    ESP_ERROR_CHECK(uart_set_pin(BMS_UART, BMS_TX, BMS_RX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 }
 
 void hw_bms_start( void )
@@ -95,7 +95,7 @@ void hw_bms_start( void )
     //Create a task to handler UART event from ISR
     xTaskCreate( bms_parse_task, "bms_parse_task", 4 * 1024, NULL, 12, NULL );
 
-    g_bms_request_timer = xTimerCreate( "bms_request", 1000 / portTICK_RATE_MS, pdTRUE, NULL, bms_request );
+    g_bms_request_timer = xTimerCreate( "bms_request", pdMS_TO_TICKS(1000), pdTRUE, NULL, bms_request );
     xTimerStart( g_bms_request_timer, 0 );
 }
 
@@ -117,7 +117,7 @@ _Noreturn static void bms_parse_task( void * params )
 
     for(;;) {
         // Read Response
-        data_sz = uart_read_bytes( UART_NUM_1, bms_data, RX_BUF_SZ, 1000 / portTICK_RATE_MS );
+        data_sz = uart_read_bytes( BMS_UART, bms_data, RX_BUF_SZ, 1000 / portTICK_RATE_MS );
         success = ( data_sz > 0 );
 
         if( !success ) {
@@ -223,7 +223,7 @@ static void send_request( uint8_t cmd )
 
     // Send Request Command
     if( success ) {
-        uart_write_bytes( UART_NUM_1, (const char *)data_ptr, data_sz );
+        uart_write_bytes( BMS_UART, (const char *)data_ptr, data_sz );
     }
 
     NailOutStream_release( &out_stream );

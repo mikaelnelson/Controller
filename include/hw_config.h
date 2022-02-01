@@ -21,8 +21,10 @@ extern "C" {
 #define WS2812B_CHANNEL             RMT_CHANNEL_0
 #define WS2812B_DO_PIN              2
 
+#define BMS_UART                    UART_NUM_1
 #define BMS_TX                      GPIO_NUM_22
 #define BMS_RX                      GPIO_NUM_23
+#define BMS_BAUD_RATE               9600
 
 #define I2C_SCL_PIN                 GPIO_NUM_12
 #define I2C_SDA_PIN                 GPIO_NUM_13
