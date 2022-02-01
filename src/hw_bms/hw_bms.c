@@ -17,7 +17,7 @@
 
 #include "hw_config.h"
 #include "hw_bms.h"
-#include "hw_bms_protocol.nail.h"
+#include "protocol.nail.h"
 
 /*********************
  *      DEFINES

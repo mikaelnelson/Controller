@@ -1,0 +1,150 @@
+/***********************************************
+                        BMS
+ ***********************************************/
+
+!BIG-ENDIAN
+
+/***********************************************
+                Command Frame
+ ***********************************************/
+
+cmd_resp_t = {
+    uint8                   = 221
+    command                 uint8
+    state                   uint8 | [0, 128]
+    @data_sz                uint8
+    data n_of @data_sz      uint8
+    @checksum               uint16
+    transform checksum ($current @checksum)
+    uint8                   = 119
+}
+
+cmd_req_t = {
+    uint8                   = 221
+    uint8                   = 165
+    command                 uint8
+    uint8                   = 0
+    @checksum               uint16
+    transform checksum ($current @checksum)
+    uint8                   = 119
+}
+
+/***********************************************
+                Response Data
+ ***********************************************/
+protection_status_t = {
+    uint3                   = 0
+    mosfet_software_lock    uint1
+    ic_frontend_error       uint1
+    short_circuit           uint1
+    discharge_overcurrent   uint1
+    charge_overcurrent      uint1
+    discharge_low_temp      uint1
+    discharge_high_temp     uint1
+    charge_low_temp         uint1
+    charge_high_temp        uint1
+    battery_under_voltage   uint1
+    battery_over_voltage    uint1
+    cell_under_voltage      uint1
+    cell_over_voltage       uint1
+}
+
+fet_control_status_t = {
+    uint6                   = 0
+    is_charging             uint1
+    is_discharging          uint1
+}
+
+basic_status_resp_t = {
+    total_voltage       uint16
+    current             uint16
+    residual_capacity   uint16
+    nominal_capacity    uint16
+    cycle_life          uint16
+    product_date        uint16
+    balance_status      uint16
+    balance_status_high uint16
+    protection_status   protection_status_t
+    version             uint8
+    rsoc                uint8
+    fet_control_status  fet_control_status_t
+    cell_series_count   uint8
+    @ntc_count          uint8
+    ntc_temperature n_of @ntc_count uint16
+}
+
+cell_voltage_resp_t = {
+    @cell_count             uint8
+    cell_voltage n_of @cell_count uint16
+}
+
+
+
+/***********************************************
+                MOTOR CONTROLLER
+ ***********************************************/
+
+!BIG-ENDIAN
+
+/***********************************************
+                Request Frame
+ ***********************************************/
+
+motor_controller_header_t = {
+    command                 uint8
+    data_sz                 uint8
+}
+
+motor_controller_footer_t = {
+    @checksum               uint8
+    transform motor_controller_checksum ($current @checksum)
+}
+
+motor_controller_cmd_req_t = {
+    command                 uint8
+                            uint8 = 0
+    @checksum               uint8
+    transform motor_controller_checksum ($current @checksum)
+}
+
+/***********************************************
+                Response Data
+ ***********************************************/
+
+motor_controller_error_status_t = {
+    identity                uint1
+    battery_over_voltage    uint1
+    battery_under_voltage   uint1
+                            uint1 = 0
+    locking                 uint1
+    v_positive              uint1
+    controller_over_temp    uint1
+                            uint1 = 0
+    reset                   uint1
+    pedal                   uint1
+    hall_sensor             uint1
+    emergency_rev           uint1
+    motor_over_temp         uint1
+    current_meter           uint1
+}
+
+motor_controller_monitor_1_resp_t = {
+    tps_pedal               uint8
+    brake_pedal             uint8
+    brake_switch            uint8 | [0, 1]
+                            uint8 = 0
+    reverse_switch          uint8 | [0, 1]
+    hall_a                  uint8 | [0, 1]
+    hall_b                  uint8 | [0, 1]
+    hall_c                  uint8 | [0, 1]
+    battery_voltage         uint8
+    motor_temperature       uint8
+    controller_temperature  uint8
+    setting_direction       uint8 | [0, 1]
+    actual_direction        uint8 | [0, 1]
+    brake_switch_2          uint8 | [0, 1]
+    low_speed               uint8 | [0, 1]
+    error_status            motor_controller_error_status_t
+    motor_speed             uint16
+    phase_current           uint16
+}

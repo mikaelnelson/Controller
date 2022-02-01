@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "hw_bms_protocol.nail.h"
+#include "protocol.nail.h"
 
 /**********************
  *      DEFINES

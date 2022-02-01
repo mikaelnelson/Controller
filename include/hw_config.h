@@ -21,6 +21,11 @@ extern "C" {
 #define WS2812B_CHANNEL             RMT_CHANNEL_0
 #define WS2812B_DO_PIN              2
 
+#define MOTOR_CONTROLLER_UART       UART_NUM_2
+#define MOTOR_CONTROLLER_TX         GPIO_NUM_18
+#define MOTOR_CONTROLLER_RX         GPIO_NUM_5
+#define MOTOR_CONTROLLER_BAUD_RATE  19200
+
 #define BMS_UART                    UART_NUM_1
 #define BMS_TX                      GPIO_NUM_22
 #define BMS_RX                      GPIO_NUM_23
