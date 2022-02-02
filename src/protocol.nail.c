@@ -384,6 +384,7 @@ void n_arena_restore(NailArena *arena, NailArenaPos p) {
 extern int checksum_parse(NailArena *tmp,NailStream *current,uint16_t* checksum);
 extern int checksum_parse(NailArena *tmp,NailStream *current,uint16_t* checksum);
 extern int motor_controller_checksum_parse(NailArena *tmp,NailStream *current,uint8_t* checksum);
+extern int motor_controller_checksum_parse(NailArena *tmp,NailStream *current,uint8_t* checksum);
 static pos peg_cmd_resp_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
 static pos peg_cmd_req_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
 static pos peg_protection_status_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
@@ -393,6 +394,7 @@ static pos peg_cell_voltage_resp_t(NailArena *tmp_arena,n_trace *trace,NailStrea
 static pos peg_motor_controller_cmd_req_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
 static pos peg_motor_controller_error_status_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
 static pos peg_motor_controller_monitor_1_resp_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
+static pos peg_motor_controller_resp_t(NailArena *tmp_arena,n_trace *trace,NailStream *str_current);
 static pos peg_cmd_resp_t(NailArena *tmp_arena,n_trace *trace, NailStream *str_current){
 pos i;
 if(parser_fail(stream_check(str_current,8))) {goto fail;}
@@ -639,7 +641,15 @@ if(parser_fail(stream_check(str_current,8))) {goto fail;}
 if(val!=0 && val!=1){stream_backup(str_current,8);goto fail;}
 }
 if(parser_fail(stream_check(str_current,8))) {goto fail;}
-if( read_unsigned_bits(str_current,8)!= 0){stream_backup(str_current,8);goto fail;}if(parser_fail(n_tr_const(trace,str_current))){goto fail;}
+{
+ uint64_t val = read_unsigned_bits(str_current,8);
+if(val!=0 && val!=1){stream_backup(str_current,8);goto fail;}
+}
+if(parser_fail(stream_check(str_current,8))) {goto fail;}
+{
+ uint64_t val = read_unsigned_bits(str_current,8);
+if(val!=0 && val!=1){stream_backup(str_current,8);goto fail;}
+}
 if(parser_fail(stream_check(str_current,8))) {goto fail;}
 {
  uint64_t val = read_unsigned_bits(str_current,8);
@@ -686,18 +696,46 @@ if(parser_fail(stream_check(str_current,8))) {goto fail;}
  uint64_t val = read_unsigned_bits(str_current,8);
 if(val!=0 && val!=1){stream_backup(str_current,8);goto fail;}
 }
-if(parser_fail(peg_motor_controller_error_status_t(tmp_arena,trace,str_current))) {goto fail;}
-if(parser_fail(stream_check(str_current,16))) {goto fail;}
-stream_advance(str_current,16);
-if(parser_fail(stream_check(str_current,16))) {goto fail;}
-stream_advance(str_current,16);
 return 0;
+fail:
+ return -1;
+}
+static pos peg_motor_controller_resp_t(NailArena *tmp_arena,n_trace *trace, NailStream *str_current){
+pos i;
+if(parser_fail(stream_check(str_current,8))) {goto fail;}
+stream_advance(str_current,8);
+; 
+ pos trace_data_sz = n_trace_getpos(trace);
+uint8_t dep_data_sz;
+{
+NailStream tmpstream = *str_current;
+if(parser_fail(stream_check(str_current,8))) {goto fail;}
+stream_advance(str_current,8);
+NailStream *stream = &tmpstream;dep_data_sz=read_unsigned_bits(stream,8);
+}n_tr_setpos(trace,trace_data_sz);
+n_tr_const(trace,str_current);
+{/*LENGTH*/pos many = n_tr_memo_many(trace);
+pos count= dep_data_sz;
+pos i4=0;for( i4=0;i4<count;i4++){if(parser_fail(stream_check(str_current,8))) {goto fail;}
+stream_advance(str_current,8);
+}n_tr_write_many(trace,many,count);
+}/*/LENGTH*/; 
+ pos trace_checksum = n_trace_getpos(trace);
+uint8_t dep_checksum;
+{
+NailStream tmpstream = *str_current;
+if(parser_fail(stream_check(str_current,8))) {goto fail;}
+stream_advance(str_current,8);
+NailStream *stream = &tmpstream;dep_checksum=read_unsigned_bits(stream,8);
+}n_tr_setpos(trace,trace_checksum);
+n_tr_const(trace,str_current);
+if(motor_controller_checksum_parse(tmp_arena,str_current,&dep_checksum)) {goto fail;}n_tr_stream(trace,str_current);return 0;
 fail:
  return -1;
 }
 
 
-static pos bind_cmd_resp_t(NailArena *arena,cmd_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_cmd_req_t(NailArena *arena,cmd_req_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_protection_status_t(NailArena *arena,protection_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_fet_control_status_t(NailArena *arena,fet_control_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_basic_status_resp_t(NailArena *arena,basic_status_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_cell_voltage_resp_t(NailArena *arena,cell_voltage_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_motor_controller_cmd_req_t(NailArena *arena,motor_controller_cmd_req_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_motor_controller_error_status_t(NailArena *arena,motor_controller_error_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_motor_controller_monitor_1_resp_t(NailArena *arena,motor_controller_monitor_1_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);
+static pos bind_cmd_resp_t(NailArena *arena,cmd_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_cmd_req_t(NailArena *arena,cmd_req_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_protection_status_t(NailArena *arena,protection_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_fet_control_status_t(NailArena *arena,fet_control_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_basic_status_resp_t(NailArena *arena,basic_status_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_cell_voltage_resp_t(NailArena *arena,cell_voltage_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_motor_controller_cmd_req_t(NailArena *arena,motor_controller_cmd_req_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_motor_controller_error_status_t(NailArena *arena,motor_controller_error_status_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_motor_controller_monitor_1_resp_t(NailArena *arena,motor_controller_monitor_1_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);static pos bind_motor_controller_resp_t(NailArena *arena,motor_controller_resp_t*out,NailStream *stream, pos **trace,  pos * trace_begin);
 static int bind_cmd_resp_t(NailArena *arena,cmd_resp_t*out,NailStream *stream, pos **trace ,  pos * trace_begin){
  pos *tr = *trace;stream_reposition(stream,*tr);
 tr++;
@@ -901,12 +939,12 @@ tr_ptr = trace.trace;if(bind_motor_controller_error_status_t(arena,retval,&strea
 out: n_trace_release(&trace);
 NailArena_release(&tmp_arena);return retval;fail: retval = NULL; goto out;}
 static int bind_motor_controller_monitor_1_resp_t(NailArena *arena,motor_controller_monitor_1_resp_t*out,NailStream *stream, pos **trace ,  pos * trace_begin){
- pos *tr = *trace;out->tps_pedal=read_unsigned_bits(stream,8);
+ pos *tr = *trace;out->throttle_pedal=read_unsigned_bits(stream,8);
 out->brake_pedal=read_unsigned_bits(stream,8);
 out->brake_switch=read_unsigned_bits(stream,8);
-stream_reposition(stream,*tr);
-tr++;
+out->foot_switch=read_unsigned_bits(stream,8);
 out->reverse_switch=read_unsigned_bits(stream,8);
+out->reversed=read_unsigned_bits(stream,8);
 out->hall_a=read_unsigned_bits(stream,8);
 out->hall_b=read_unsigned_bits(stream,8);
 out->hall_c=read_unsigned_bits(stream,8);
@@ -917,8 +955,6 @@ out->setting_direction=read_unsigned_bits(stream,8);
 out->actual_direction=read_unsigned_bits(stream,8);
 out->brake_switch_2=read_unsigned_bits(stream,8);
 out->low_speed=read_unsigned_bits(stream,8);
-if(parser_fail(bind_motor_controller_error_status_t(arena,&out->error_status, stream,&tr,trace_begin))) { return -1;}out->motor_speed=read_unsigned_bits(stream,16);
-out->phase_current=read_unsigned_bits(stream,16);
 *trace = tr;return 0;}motor_controller_monitor_1_resp_t*parse_motor_controller_monitor_1_resp_t(NailArena *arena, const uint8_t *data, size_t size){
 NailStream stream = {.data = data, .pos= 0, .size = size, .bit_offset = 0};
 NailArena tmp_arena;NailArena_init(&tmp_arena, 4096, arena->error_ret);n_trace trace;
@@ -931,6 +967,31 @@ stream.pos = 0;
 tr_ptr = trace.trace;if(bind_motor_controller_monitor_1_resp_t(arena,retval,&stream,&tr_ptr,trace.trace) < 0) goto fail;
 out: n_trace_release(&trace);
 NailArena_release(&tmp_arena);return retval;fail: retval = NULL; goto out;}
+static int bind_motor_controller_resp_t(NailArena *arena,motor_controller_resp_t*out,NailStream *stream, pos **trace ,  pos * trace_begin){
+ pos *tr = *trace;out->command=read_unsigned_bits(stream,8);
+stream_reposition(stream,*tr);
+tr++;
+{ /*ARRAY*/ 
+ pos save = 0;out->data.count=*(tr++);
+save = *(tr++);
+out->data.elem= (typeof(out->data.elem))n_malloc(arena,out->data.count* sizeof(*out->data.elem));
+for(pos i4=0;i4<out->data.count;i4++){out->data.elem[i4]=read_unsigned_bits(stream,8);
+}
+tr = trace_begin + save;
+}stream_reposition(stream,*tr);
+tr++;
+*stream = *(NailStream *)tr;tr+= sizeof(NailStream) / sizeof(*tr);*trace = tr;return 0;}motor_controller_resp_t*parse_motor_controller_resp_t(NailArena *arena, const uint8_t *data, size_t size){
+NailStream stream = {.data = data, .pos= 0, .size = size, .bit_offset = 0};
+NailArena tmp_arena;NailArena_init(&tmp_arena, 4096, arena->error_ret);n_trace trace;
+pos *tr_ptr;
+ pos pos;
+motor_controller_resp_t* retval;
+n_trace_init(&trace,4096,4096);
+if(parser_fail(peg_motor_controller_resp_t(&tmp_arena,&trace,&stream))) goto fail;if(stream.pos != stream.size) goto fail; retval =  (typeof(retval))n_malloc(arena,sizeof(*retval));
+stream.pos = 0;
+tr_ptr = trace.trace;if(bind_motor_controller_resp_t(arena,retval,&stream,&tr_ptr,trace.trace) < 0) goto fail;
+out: n_trace_release(&trace);
+NailArena_release(&tmp_arena);return retval;fail: retval = NULL; goto out;}
 int gen_cmd_resp_t(NailArena *tmp_arena,NailOutStream *out,cmd_resp_t * val);
 extern  int checksum_generate(NailArena *tmp_arena,NailOutStream *str_current,uint16_t* checksum);int gen_cmd_req_t(NailArena *tmp_arena,NailOutStream *out,cmd_req_t * val);
 extern  int checksum_generate(NailArena *tmp_arena,NailOutStream *str_current,uint16_t* checksum);int gen_protection_status_t(NailArena *tmp_arena,NailOutStream *out,protection_status_t * val);
@@ -940,7 +1001,8 @@ int gen_cell_voltage_resp_t(NailArena *tmp_arena,NailOutStream *out,cell_voltage
 int gen_motor_controller_cmd_req_t(NailArena *tmp_arena,NailOutStream *out,motor_controller_cmd_req_t * val);
 extern  int motor_controller_checksum_generate(NailArena *tmp_arena,NailOutStream *str_current,uint8_t* checksum);int gen_motor_controller_error_status_t(NailArena *tmp_arena,NailOutStream *out,motor_controller_error_status_t * val);
 int gen_motor_controller_monitor_1_resp_t(NailArena *tmp_arena,NailOutStream *out,motor_controller_monitor_1_resp_t * val);
-int gen_cmd_resp_t(NailArena *tmp_arena,NailOutStream *str_current,cmd_resp_t * val){if(parser_fail(NailOutStream_write(str_current,221,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->command,8))) return -1;if(val->state!=0 && val->state!=128){return -1;}if(parser_fail(NailOutStream_write(str_current,val->state,8))) return -1;uint8_t dep_data_sz;NailOutStreamPos rewind_data_sz=NailOutStream_getpos(str_current);NailOutStream_write(str_current,0,8);for(int i0=0;i0<val->data.count;i0++){if(parser_fail(NailOutStream_write(str_current,val->data.elem[i0],8))) return -1;}dep_data_sz=val->data.count;uint16_t dep_checksum;NailOutStreamPos rewind_checksum=NailOutStream_getpos(str_current);NailOutStream_write(str_current,0,16);if(parser_fail(NailOutStream_write(str_current,119,8))) return -1;if(parser_fail(checksum_generate(tmp_arena,str_current,&dep_checksum))){return -1;}{ NailOutStreamPos t_rewind_eot =NailOutStream_getpos(str_current);
+int gen_motor_controller_resp_t(NailArena *tmp_arena,NailOutStream *out,motor_controller_resp_t * val);
+extern  int motor_controller_checksum_generate(NailArena *tmp_arena,NailOutStream *str_current,uint8_t* checksum);int gen_cmd_resp_t(NailArena *tmp_arena,NailOutStream *str_current,cmd_resp_t * val){if(parser_fail(NailOutStream_write(str_current,221,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->command,8))) return -1;if(val->state!=0 && val->state!=128){return -1;}if(parser_fail(NailOutStream_write(str_current,val->state,8))) return -1;uint8_t dep_data_sz;NailOutStreamPos rewind_data_sz=NailOutStream_getpos(str_current);NailOutStream_write(str_current,0,8);for(int i0=0;i0<val->data.count;i0++){if(parser_fail(NailOutStream_write(str_current,val->data.elem[i0],8))) return -1;}dep_data_sz=val->data.count;uint16_t dep_checksum;NailOutStreamPos rewind_checksum=NailOutStream_getpos(str_current);NailOutStream_write(str_current,0,16);if(parser_fail(NailOutStream_write(str_current,119,8))) return -1;if(parser_fail(checksum_generate(tmp_arena,str_current,&dep_checksum))){return -1;}{ NailOutStreamPos t_rewind_eot =NailOutStream_getpos(str_current);
 NailOutStream_reposition(str_current, rewind_checksum);NailOutStream_write(str_current,dep_checksum,16); NailOutStream_reposition(str_current, t_rewind_eot);
  }{/*Context-rewind*/
  NailOutStreamPos  end_of_struct= NailOutStream_getpos(str_current);
@@ -962,8 +1024,12 @@ NailOutStream_reposition(str_current, rewind_checksum);NailOutStream_write(str_c
  NailOutStreamPos  end_of_struct= NailOutStream_getpos(str_current);
 NailOutStream_reposition(str_current, rewind_checksum);NailOutStream_write(str_current,dep_checksum,8);NailOutStream_reposition(str_current, end_of_struct);}return 0;}int gen_motor_controller_error_status_t(NailArena *tmp_arena,NailOutStream *str_current,motor_controller_error_status_t * val){if(parser_fail(NailOutStream_write(str_current,val->identity,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->battery_over_voltage,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->battery_under_voltage,1))) return -1;if(parser_fail(NailOutStream_write(str_current,0,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->locking,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->v_positive,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->controller_over_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,0,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->reset,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->pedal,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->hall_sensor,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->emergency_rev,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->motor_over_temp,1))) return -1;if(parser_fail(NailOutStream_write(str_current,val->current_meter,1))) return -1;{/*Context-rewind*/
  NailOutStreamPos  end_of_struct= NailOutStream_getpos(str_current);
-NailOutStream_reposition(str_current, end_of_struct);}return 0;}int gen_motor_controller_monitor_1_resp_t(NailArena *tmp_arena,NailOutStream *str_current,motor_controller_monitor_1_resp_t * val){if(parser_fail(NailOutStream_write(str_current,val->tps_pedal,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->brake_pedal,8))) return -1;if(val->brake_switch!=0 && val->brake_switch!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->brake_switch,8))) return -1;if(parser_fail(NailOutStream_write(str_current,0,8))) return -1;if(val->reverse_switch!=0 && val->reverse_switch!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->reverse_switch,8))) return -1;if(val->hall_a!=0 && val->hall_a!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->hall_a,8))) return -1;if(val->hall_b!=0 && val->hall_b!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->hall_b,8))) return -1;if(val->hall_c!=0 && val->hall_c!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->hall_c,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->battery_voltage,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->motor_temperature,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->controller_temperature,8))) return -1;if(val->setting_direction!=0 && val->setting_direction!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->setting_direction,8))) return -1;if(val->actual_direction!=0 && val->actual_direction!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->actual_direction,8))) return -1;if(val->brake_switch_2!=0 && val->brake_switch_2!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->brake_switch_2,8))) return -1;if(val->low_speed!=0 && val->low_speed!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->low_speed,8))) return -1;if(parser_fail(gen_motor_controller_error_status_t(tmp_arena,str_current,&val->error_status))){return -1;}if(parser_fail(NailOutStream_write(str_current,val->motor_speed,16))) return -1;if(parser_fail(NailOutStream_write(str_current,val->phase_current,16))) return -1;{/*Context-rewind*/
+NailOutStream_reposition(str_current, end_of_struct);}return 0;}int gen_motor_controller_monitor_1_resp_t(NailArena *tmp_arena,NailOutStream *str_current,motor_controller_monitor_1_resp_t * val){if(parser_fail(NailOutStream_write(str_current,val->throttle_pedal,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->brake_pedal,8))) return -1;if(val->brake_switch!=0 && val->brake_switch!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->brake_switch,8))) return -1;if(val->foot_switch!=0 && val->foot_switch!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->foot_switch,8))) return -1;if(val->reverse_switch!=0 && val->reverse_switch!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->reverse_switch,8))) return -1;if(val->reversed!=0 && val->reversed!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->reversed,8))) return -1;if(val->hall_a!=0 && val->hall_a!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->hall_a,8))) return -1;if(val->hall_b!=0 && val->hall_b!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->hall_b,8))) return -1;if(val->hall_c!=0 && val->hall_c!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->hall_c,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->battery_voltage,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->motor_temperature,8))) return -1;if(parser_fail(NailOutStream_write(str_current,val->controller_temperature,8))) return -1;if(val->setting_direction!=0 && val->setting_direction!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->setting_direction,8))) return -1;if(val->actual_direction!=0 && val->actual_direction!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->actual_direction,8))) return -1;if(val->brake_switch_2!=0 && val->brake_switch_2!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->brake_switch_2,8))) return -1;if(val->low_speed!=0 && val->low_speed!=1){return -1;}if(parser_fail(NailOutStream_write(str_current,val->low_speed,8))) return -1;{/*Context-rewind*/
  NailOutStreamPos  end_of_struct= NailOutStream_getpos(str_current);
-NailOutStream_reposition(str_current, end_of_struct);}return 0;}
+NailOutStream_reposition(str_current, end_of_struct);}return 0;}int gen_motor_controller_resp_t(NailArena *tmp_arena,NailOutStream *str_current,motor_controller_resp_t * val){if(parser_fail(NailOutStream_write(str_current,val->command,8))) return -1;uint8_t dep_data_sz;NailOutStreamPos rewind_data_sz=NailOutStream_getpos(str_current);NailOutStream_write(str_current,0,8);for(int i3=0;i3<val->data.count;i3++){if(parser_fail(NailOutStream_write(str_current,val->data.elem[i3],8))) return -1;}dep_data_sz=val->data.count;uint8_t dep_checksum;NailOutStreamPos rewind_checksum=NailOutStream_getpos(str_current);NailOutStream_write(str_current,0,8);if(parser_fail(motor_controller_checksum_generate(tmp_arena,str_current,&dep_checksum))){return -1;}{ NailOutStreamPos t_rewind_eot =NailOutStream_getpos(str_current);
+NailOutStream_reposition(str_current, rewind_checksum);NailOutStream_write(str_current,dep_checksum,8); NailOutStream_reposition(str_current, t_rewind_eot);
+ }{/*Context-rewind*/
+ NailOutStreamPos  end_of_struct= NailOutStream_getpos(str_current);
+NailOutStream_reposition(str_current, rewind_data_sz);NailOutStream_write(str_current,dep_data_sz,8);NailOutStream_reposition(str_current, rewind_checksum);NailOutStream_write(str_current,dep_checksum,8);NailOutStream_reposition(str_current, end_of_struct);}return 0;}
 
 

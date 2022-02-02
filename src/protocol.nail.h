@@ -11,6 +11,7 @@ typedef struct cell_voltage_resp_t cell_voltage_resp_t;
 typedef struct motor_controller_cmd_req_t motor_controller_cmd_req_t;
 typedef struct motor_controller_error_status_t motor_controller_error_status_t;
 typedef struct motor_controller_monitor_1_resp_t motor_controller_monitor_1_resp_t;
+typedef struct motor_controller_resp_t motor_controller_resp_t;
 struct cmd_resp_t{
 uint8_t command;
 uint8_t state;
@@ -92,10 +93,12 @@ uint8_t current_meter;
 }
 ;
 struct motor_controller_monitor_1_resp_t{
-uint8_t tps_pedal;
+uint8_t throttle_pedal;
 uint8_t brake_pedal;
 uint8_t brake_switch;
+uint8_t foot_switch;
 uint8_t reverse_switch;
+uint8_t reversed;
 uint8_t hall_a;
 uint8_t hall_b;
 uint8_t hall_c;
@@ -106,9 +109,14 @@ uint8_t setting_direction;
 uint8_t actual_direction;
 uint8_t brake_switch_2;
 uint8_t low_speed;
-motor_controller_error_status_t error_status;
-uint16_t motor_speed;
-uint16_t phase_current;
+}
+;
+struct motor_controller_resp_t{
+uint8_t command;
+struct {
+uint8_t*elem;
+ size_t count;
+} data;
 }
 ;
 
@@ -172,8 +180,10 @@ cell_voltage_resp_t*parse_cell_voltage_resp_t(NailArena *arena, const uint8_t *d
 motor_controller_cmd_req_t*parse_motor_controller_cmd_req_t(NailArena *arena, const uint8_t *data, size_t size);
 motor_controller_error_status_t*parse_motor_controller_error_status_t(NailArena *arena, const uint8_t *data, size_t size);
 motor_controller_monitor_1_resp_t*parse_motor_controller_monitor_1_resp_t(NailArena *arena, const uint8_t *data, size_t size);
+motor_controller_resp_t*parse_motor_controller_resp_t(NailArena *arena, const uint8_t *data, size_t size);
 extern int checksum_parse(NailArena *tmp,NailStream *current,uint16_t* checksum);
 extern int checksum_parse(NailArena *tmp,NailStream *current,uint16_t* checksum);
+extern int motor_controller_checksum_parse(NailArena *tmp,NailStream *current,uint8_t* checksum);
 extern int motor_controller_checksum_parse(NailArena *tmp,NailStream *current,uint8_t* checksum);
 
 int gen_cmd_resp_t(NailArena *tmp_arena,NailOutStream *out,cmd_resp_t * val);
@@ -185,5 +195,6 @@ int gen_cell_voltage_resp_t(NailArena *tmp_arena,NailOutStream *out,cell_voltage
 int gen_motor_controller_cmd_req_t(NailArena *tmp_arena,NailOutStream *out,motor_controller_cmd_req_t * val);
 extern  int motor_controller_checksum_generate(NailArena *tmp_arena,NailOutStream *str_current,uint8_t* checksum);int gen_motor_controller_error_status_t(NailArena *tmp_arena,NailOutStream *out,motor_controller_error_status_t * val);
 int gen_motor_controller_monitor_1_resp_t(NailArena *tmp_arena,NailOutStream *out,motor_controller_monitor_1_resp_t * val);
-
+int gen_motor_controller_resp_t(NailArena *tmp_arena,NailOutStream *out,motor_controller_resp_t * val);
+extern  int motor_controller_checksum_generate(NailArena *tmp_arena,NailOutStream *str_current,uint8_t* checksum);
 

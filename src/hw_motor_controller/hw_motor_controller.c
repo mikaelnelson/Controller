@@ -106,23 +106,50 @@ void hw_motor_controller_stop( void )
 
 _Noreturn static void motor_controller_parse_task(void * params )
 {
-    TickType_t      cur_time;
-    NailArena       arena;
-    jmp_buf         err;
+    bool                        success;
+    uint8_t                     data[RX_BUF_SZ];
+    int                         data_sz = 0;
+    motor_controller_resp_t   * resp;
 
-    // Initialize Nail Arena
-    NailArena_init(&arena, 128, &err);
+    for(;;) {
+        // Read Response
+        data_sz = uart_read_bytes( MOTOR_CONTROLLER_UART, data, RX_BUF_SZ, 1000 / portTICK_RATE_MS );
+        success = ( data_sz > 0 );
 
-    while(true) {
-        cur_time = xTaskGetTickCount();
+        if( !success ) {
+            continue;
+        }
 
+        // Parse Command Response
+        if( success ) {
+            resp = parse_motor_controller_resp_t( &g_rx_arena, data, data_sz );
+            success = (NULL != resp);
+        }
 
-        // Sleep until next request
-//        vTaskDelayUntil( &last_wake_time, pdMS_TO_TICKS(100) );
+        // Handle Command
+        if( success ) {
+            switch( resp->command ) {
+                case CMD_MONITOR_1: {
+                    motor_controller_monitor_1_resp_t * monitor_1_resp;
+
+                    monitor_1_resp = parse_motor_controller_monitor_1_resp_t( &g_rx_arena, resp->data.elem, resp->data.count );
+                    success = ( NULL != monitor_1_resp );
+
+                    if( success ) {
+                        PUB_INT("motor_controller.throttle_position", monitor_1_resp->throttle_pedal);
+                        PUB_INT("motor_controller.brake_position", monitor_1_resp->brake_pedal);
+                        PUB_DBL("motor_controller.current_voltage", (double)(monitor_1_resp->battery_voltage));
+                        PUB_DBL("motor_controller.motor_temperature", (double)(monitor_1_resp->motor_temperature));
+                        PUB_DBL("motor_controller.controller_temperature", (double)(monitor_1_resp->controller_temperature));
+
+                    }
+                } break;
+
+                default:
+                    break;
+            }
+        }
     }
-
-    // Release Nail Arena
-    NailArena_release( &arena );
 
     vTaskDelete(NULL);
 }
@@ -160,10 +187,6 @@ static void send_request( uint8_t cmd )
 
     // Send Request Command
     if( success ) {
-        for( int idx = 0; idx < data_sz; idx++ ) {
-            printf("%02X ", data_ptr[idx]);
-        }
-        printf("\n");
         uart_write_bytes( MOTOR_CONTROLLER_UART, (const char *)data_ptr, data_sz );
     }
 

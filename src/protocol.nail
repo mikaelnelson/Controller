@@ -90,16 +90,6 @@ cell_voltage_resp_t = {
                 Request Frame
  ***********************************************/
 
-motor_controller_header_t = {
-    command                 uint8
-    data_sz                 uint8
-}
-
-motor_controller_footer_t = {
-    @checksum               uint8
-    transform motor_controller_checksum ($current @checksum)
-}
-
 motor_controller_cmd_req_t = {
     command                 uint8
                             uint8 = 0
@@ -128,12 +118,15 @@ motor_controller_error_status_t = {
     current_meter           uint1
 }
 
+
 motor_controller_monitor_1_resp_t = {
-    tps_pedal               uint8
+
+    throttle_pedal          uint8
     brake_pedal             uint8
     brake_switch            uint8 | [0, 1]
-                            uint8 = 0
+    foot_switch             uint8 | [0, 1]
     reverse_switch          uint8 | [0, 1]
+    reversed                uint8 | [0, 1]
     hall_a                  uint8 | [0, 1]
     hall_b                  uint8 | [0, 1]
     hall_c                  uint8 | [0, 1]
@@ -144,7 +137,12 @@ motor_controller_monitor_1_resp_t = {
     actual_direction        uint8 | [0, 1]
     brake_switch_2          uint8 | [0, 1]
     low_speed               uint8 | [0, 1]
-    error_status            motor_controller_error_status_t
-    motor_speed             uint16
-    phase_current           uint16
+}
+
+motor_controller_resp_t = {
+    command                 uint8
+    @data_sz                uint8
+    data n_of @data_sz      uint8
+    @checksum               uint8
+    transform motor_controller_checksum ($current @checksum)
 }
