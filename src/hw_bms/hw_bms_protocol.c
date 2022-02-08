@@ -5,8 +5,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "protocol.nail.h"
-
 /**********************
  *      DEFINES
  *********************/
@@ -16,6 +14,24 @@
 #define SIZE_IDX            3
 #define DATA_IDX            4
 
+#define BASIC_STATUS_TOTAL_VOLTAGE_OFST         0
+#define BASIC_STATUS_CURRENT_OFST               2
+#define BASIC_STATUS_RESIDUAL_CAPACITY_OFST     4
+#define BASIC_STATUS_NOMINAL_CAPACITY_OFST      6
+#define BASIC_STATUS_CYCLE_LIFE_OFST            8
+#define BASIC_STATUS_PRODUCT_DATE_OFST          10
+#define BASIC_STATUS_BALANCE_STATUS_OFST        12
+#define BASIC_STATUS_BALANCE_STATUS_HIGH_OFST   14
+#define BASIC_STATUS_PROTECTION_STATUS_OFST     16
+#define BASIC_STATUS_VERSION_OFST               17
+#define BASIC_STATUS_RSOC_OFST                  18
+#define BASIC_STATUS_FET_CONTROL_STATUS_OFST    19
+#define BASIC_STATUS_CELL_SERIES_COUNT_OFST     20
+#define BASIC_STATUS_NTC_TEMPERATURE_CNT_OFST   21
+#define BASIC_STATUS_NTC_TEMPERATURE_TBL_OFST   22
+
+
+#define BASIC_STATUS_STATIC_SIZE                22
 /**********************
  *      TYPEDEFS
  **********************/
@@ -41,48 +57,9 @@
  **********************/
 
 static uint16_t calc_checksum( uint8_t * data );
-static uint16_t read_checksum( uint8_t * data );
-
-int checksum_generate(NailArena *tmp_arena, NailOutStream *str_current, uint16_t *checksum);
-int checksum_parse( NailArena *tmp, NailStream *current, uint16_t *checksum );
 
 
-int checksum_generate(NailArena *tmp_arena, NailOutStream *str_current, uint16_t *checksum)
-{
-    NailStream    * stream_in;
 
-    // Rename I/O Streams
-    stream_in = str_current;
-
-    // Calculate Checksum from stream_in
-    *checksum = calc_checksum( stream_in->data );
-
-    return 0;
-}
-
-int checksum_parse( NailArena *tmp, NailStream *current, uint16_t *checksum )
-{
-    NailStream    * stream_in;
-    bool            success;
-
-    // Rename I/O Streams
-    stream_in = current;
-
-    // Calculate Checksum Using Current Data
-    uint16_t cl_checksum = calc_checksum( stream_in->data );
-
-    // Get Checksum From Current Data
-    uint16_t rx_checksum = read_checksum(stream_in->data);
-
-    // Compare Checksums
-    success = ( cl_checksum == rx_checksum );
-
-    if( success ) {
-        *checksum = cl_checksum;
-    }
-
-    return success ? 0 : -1;
-}
 
 
 static uint16_t calc_checksum( uint8_t * data )
@@ -102,18 +79,6 @@ static uint16_t calc_checksum( uint8_t * data )
     }
 
     checksum += 1;
-
-    return checksum;
-}
-
-
-
-static uint16_t read_checksum( uint8_t * data )
-{
-    uint16_t checksum;
-    uint8_t length = data[SIZE_IDX];
-
-    checksum = data[DATA_IDX + length] << 8 | data[DATA_IDX + length + 1];
 
     return checksum;
 }
