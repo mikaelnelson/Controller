@@ -31,10 +31,12 @@
 #define PKT_CHECKSUM_IDX(_size) ( PKT_DATA_IDX + (_size) )
 #define PKT_END_IDX(_size)      ( PKT_CHECKSUM_IDX( (_size) + 2 ) )
 
-#define PKT_SIZE(_data)         (((_data)[PKT_SIZE_IDX]) + 7)
+#define PKT_STATIC_SIZE         7
+#define PKT_DATA_SIZE(_data)    (((_data)[PKT_SIZE_IDX]))
+#define PKT_SIZE(_data)         (PKT_DATA_SIZE(_data) + PKT_STATIC_SIZE)
 
 #define RX_BUF_SZ               128
-#define CMD_BUF_SZ              16
+#define TX_BUF_SZ               16
 
 #define START_BYTE              0xDD
 #define WRITE_BYTE              0x5A
@@ -67,8 +69,12 @@ static TimerHandle_t            g_bms_request_timer;
 /**********************
  *    PROTOTYPES
  **********************/
-static void send_request( cmd_t cmd );
+static bool send_packet( cmd_t cmd, uint8_t * data, uint8_t data_sz );
+static bool recv_packet( cmd_t * cmd, uint8_t * data, uint8_t * data_sz );
+
 static uint16_t calc_checksum( uint8_t * data );
+static uint16_t read_checksum( uint8_t * data );
+static bool validate_checksum( uint8_t * data );
 
 
 _Noreturn static void bms_parse_task( void * params );
@@ -115,16 +121,20 @@ void hw_bms_stop( void )
 _Noreturn static void bms_parse_task( void * params )
 {
     bool        success;
-    uint8_t     bms_data[RX_BUF_SZ];
-    int         data_sz = 0;
+    cmd_t       cmd;
+    uint8_t     pkt_data[RX_BUF_SZ];
+    uint8_t     pkt_data_sz;
 //    cmd_resp_t* cmd_resp;
 
     for(;;) {
         // Read Response portMAX_DELAY
-        data_sz = uart_read_bytes( BMS_UART, bms_data, RX_BUF_SZ, 1000 / portTICK_RATE_MS );
-        success = ( data_sz > 0 );
+//        data_sz = uart_read_bytes( BMS_UART, bms_data, RX_BUF_SZ, portMAX_DELAY );
+//        success = ( data_sz > 0 );
 
-        printf("Data Size: %d\n", data_sz);
+        pkt_data_sz = sizeof(pkt_data);
+        success = recv_packet( &cmd, pkt_data, &pkt_data_sz );
+
+        printf("Data Size: %d\n", pkt_data_sz);
 
         if( !success ) {
             continue;
@@ -199,42 +209,132 @@ _Noreturn static void bms_parse_task( void * params )
 
 void bms_request( TimerHandle_t xTimer )
 {
-    send_request(CMD_BASIC_INFO);
+    send_packet(CMD_BASIC_INFO, NULL, 0);
 }
 
-static void send_request( cmd_t cmd )
+static bool send_packet( cmd_t cmd, uint8_t * data, uint8_t data_sz )
 {
-    uint8_t cmd_data[CMD_BUF_SZ];
-    uint16_t checksum;
+    bool        success;
 
-    //{ 0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77 };
-    cmd_data[PKT_START_IDX] = START_BYTE;
-    cmd_data[PKT_OP_IDX] = READ_BYTE;
-    cmd_data[PKT_CMD_IDX] = cmd;
-    cmd_data[PKT_SIZE_IDX] = 0;
+    // Will packet fit buffer?
+    success = ( data_sz < (TX_BUF_SZ - PKT_STATIC_SIZE) );
 
-    checksum = calc_checksum( cmd_data );
+    // Construct & Send Packet
+    if( success ) {
+        uint8_t     pkt_data[TX_BUF_SZ];
+        uint16_t    checksum;
 
-    cmd_data[PKT_CHECKSUM_IDX(0) + 0] = ( checksum >> 8 ) & 0x00FF;
-    cmd_data[PKT_CHECKSUM_IDX(0) + 1] = ( checksum >> 0 ) & 0x00FF;
+        //{ 0xDD, 0xA5, 0x03, 0x00, 0xFF, 0xFD, 0x77 };
+        pkt_data[PKT_START_IDX] = START_BYTE;
+        pkt_data[PKT_OP_IDX] = READ_BYTE;
+        pkt_data[PKT_CMD_IDX] = cmd;
+        pkt_data[PKT_SIZE_IDX] = data_sz;
 
-    cmd_data[PKT_END_IDX(0)] = END_BYTE;
+        for( int idx = 0; idx < data_sz; idx++ ) {
+            pkt_data[PKT_DATA_IDX + idx] = data[idx];
+        }
 
-    printf("Send: ");
-    for( int idx = 0; idx < PKT_SIZE(cmd_data); idx++ ) {
-        printf("%02X ", cmd_data[idx]);
+        checksum = calc_checksum( pkt_data );
+
+        pkt_data[PKT_CHECKSUM_IDX(data_sz) + 0] = ( checksum >> 8 ) & 0x00FF;
+        pkt_data[PKT_CHECKSUM_IDX(data_sz) + 1] = ( checksum >> 0 ) & 0x00FF;
+
+        pkt_data[PKT_END_IDX(data_sz)] = END_BYTE;
+
+        printf("Send: ");
+        for( int idx = 0; idx < PKT_SIZE(pkt_data); idx++ ) {
+            printf("%02X ", pkt_data[idx]);
+        }
+        printf("\n");
+
+        // Send Request Command
+        uart_write_bytes( UART_NUM_1, (const char *)pkt_data, PKT_SIZE(pkt_data) );
     }
-    printf("\n");
 
-    // Send Request Command
-    uart_write_bytes( UART_NUM_1, (const char *)cmd_data, PKT_SIZE(cmd_data) );
+    return success;
 }
+
+static bool recv_packet( cmd_t * cmd, uint8_t * data, uint8_t * data_sz )
+{
+    bool        success;
+    uint8_t     pkt_data[RX_BUF_SZ];
+
+    // Validate Inputs
+    success = (NULL != cmd) && (NULL != data) && (NULL != data_sz);
+
+    // Receive Start Byte
+    if( success ) {
+        success = ( sizeof(uint8_t) == uart_read_bytes( BMS_UART, &pkt_data[PKT_START_IDX], sizeof(uint8_t), portMAX_DELAY ) );
+    }
+
+    // Check Start Byte
+    if( success ) {
+        success = ( START_BYTE == pkt_data[PKT_START_IDX] );
+    }
+
+    // Receive Operation Byte
+    if( success ) {
+        success = ( sizeof(uint8_t) == uart_read_bytes( BMS_UART, &pkt_data[PKT_OP_IDX], sizeof(uint8_t), portMAX_DELAY ) );
+    }
+
+    // Receive Command Byte
+    if( success ) {
+        success = ( sizeof(uint8_t) == uart_read_bytes( BMS_UART, &pkt_data[PKT_CMD_IDX], sizeof(uint8_t), portMAX_DELAY ) );
+    }
+
+    // Receive Size Byte
+    if( success ) {
+        success = ( sizeof(uint8_t) == uart_read_bytes( BMS_UART, &pkt_data[PKT_SIZE_IDX], sizeof(uint8_t), portMAX_DELAY ) );
+    }
+
+    // Receive Data
+    if( success ) {
+        uint8_t     pkt_data_sz = PKT_DATA_SIZE(pkt_data);
+        success = ( (pkt_data_sz * sizeof(uint8_t)) == uart_read_bytes( BMS_UART, &pkt_data[PKT_DATA_IDX], (pkt_data_sz * sizeof(uint8_t)), portMAX_DELAY ) );
+    }
+
+    // Receive Checksum
+    if( success ) {
+        uint8_t     pkt_data_sz = PKT_DATA_SIZE(pkt_data);
+        success = ( (2 * sizeof(uint8_t)) == uart_read_bytes( BMS_UART, &pkt_data[PKT_CHECKSUM_IDX(pkt_data_sz)], (2 * sizeof(uint8_t)), portMAX_DELAY ) );
+    }
+
+    // Receive End Byte
+    if( success ) {
+        uint8_t     pkt_data_sz = PKT_DATA_SIZE(pkt_data);
+        success = ( sizeof(uint8_t) == uart_read_bytes( BMS_UART, &pkt_data[PKT_END_IDX(pkt_data_sz)], sizeof(uint8_t), portMAX_DELAY ) );
+    }
+
+    // Validate Checksum
+    if( success ) {
+        success = validate_checksum(pkt_data);
+    }
+
+    // Validate Output Buffer Size
+    if( success ) {
+        uint8_t     pkt_data_sz = PKT_DATA_SIZE(pkt_data);
+
+        success = ( pkt_data_sz < *data_sz );
+    }
+
+    // Setup Return Buffers
+    if( success ) {
+        uint8_t     pkt_data_sz = PKT_DATA_SIZE(pkt_data);
+
+        *cmd = pkt_data[PKT_CMD_IDX];
+        *data_sz = pkt_data_sz;
+        memcpy(data, &pkt_data[PKT_DATA_IDX], pkt_data_sz);
+    }
+
+    return success;
+}
+
 
 
 static uint16_t calc_checksum( uint8_t * data )
 {
     uint16_t checksum = 0xFFFF;
-    uint8_t length = data[PKT_SIZE_IDX];
+    uint8_t length = PKT_DATA_SIZE(data);
 
     // Subtract Command
     checksum -= data[PKT_CMD_IDX];
@@ -250,4 +350,19 @@ static uint16_t calc_checksum( uint8_t * data )
     checksum += 1;
 
     return checksum;
+}
+
+static uint16_t read_checksum( uint8_t * data )
+{
+    uint16_t checksum;
+    uint8_t length = PKT_DATA_SIZE(data);
+
+    checksum = data[PKT_DATA_IDX + length] << 8 | data[PKT_DATA_IDX + length + 1];
+
+    return checksum;
+}
+
+static bool validate_checksum( uint8_t * data )
+{
+    return (calc_checksum(data) == read_checksum(data));
 }
