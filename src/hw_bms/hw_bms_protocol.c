@@ -4,18 +4,31 @@
 #include <string.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <endian.h>
 
-#include "protocol.nail.h"
+#include "hw_bms_protocol.h"
 
 /**********************
  *      DEFINES
  *********************/
-#define START_IDX           0
-#define CMD_IDX             1
-#define STATE_IDX           2
-#define SIZE_IDX            3
-#define DATA_IDX            4
+#define BASIC_STATUS_TOTAL_VOLTAGE_OFST         0
+#define BASIC_STATUS_CURRENT_OFST               2
+#define BASIC_STATUS_RESIDUAL_CAPACITY_OFST     4
+#define BASIC_STATUS_NOMINAL_CAPACITY_OFST      6
+#define BASIC_STATUS_CYCLE_LIFE_OFST            8
+#define BASIC_STATUS_PRODUCT_DATE_OFST          10
+#define BASIC_STATUS_BALANCE_STATUS_OFST        12
+#define BASIC_STATUS_BALANCE_STATUS_HIGH_OFST   14
+#define BASIC_STATUS_PROTECTION_STATUS_OFST     16
+#define BASIC_STATUS_VERSION_OFST               18
+#define BASIC_STATUS_RSOC_OFST                  19
+#define BASIC_STATUS_FET_CONTROL_STATUS_OFST    20
+#define BASIC_STATUS_CELL_SERIES_COUNT_OFST     21
+#define BASIC_STATUS_NTC_TEMPERATURE_CNT_OFST   22
+#define BASIC_STATUS_NTC_TEMPERATURE_TBL_OFST   23
 
+
+#define BASIC_STATUS_STATIC_SIZE                23
 /**********************
  *      TYPEDEFS
  **********************/
@@ -40,80 +53,55 @@
  *    PROTOTYPES
  **********************/
 
-static uint16_t calc_checksum( uint8_t * data );
-static uint16_t read_checksum( uint8_t * data );
 
-int checksum_generate(NailArena *tmp_arena, NailOutStream *str_current, uint16_t *checksum);
-int checksum_parse( NailArena *tmp, NailStream *current, uint16_t *checksum );
-
-
-int checksum_generate(NailArena *tmp_arena, NailOutStream *str_current, uint16_t *checksum)
+bool hw_bms_basic_status_resp_parse( hw_bms_basic_status_resp_t * resp, const uint8_t * data, size_t data_sz )
 {
-    NailStream    * stream_in;
+    bool        success;
 
-    // Rename I/O Streams
-    stream_in = str_current;
+    // Validate Input
+    success = (NULL != resp) && (NULL != data);
 
-    // Calculate Checksum from stream_in
-    *checksum = calc_checksum( stream_in->data );
-
-    return 0;
-}
-
-int checksum_parse( NailArena *tmp, NailStream *current, uint16_t *checksum )
-{
-    NailStream    * stream_in;
-    bool            success;
-
-    // Rename I/O Streams
-    stream_in = current;
-
-    // Calculate Checksum Using Current Data
-    uint16_t cl_checksum = calc_checksum( stream_in->data );
-
-    // Get Checksum From Current Data
-    uint16_t rx_checksum = read_checksum(stream_in->data);
-
-    // Compare Checksums
-    success = ( cl_checksum == rx_checksum );
-
+    // Parse Packet
     if( success ) {
-        *checksum = cl_checksum;
+        resp->total_voltage = ( be16toh(*((uint16_t *)&data[BASIC_STATUS_TOTAL_VOLTAGE_OFST])) / 100.0f);
+        resp->current = ( be16toh(*((uint16_t *)&data[BASIC_STATUS_CURRENT_OFST])) / 100.0f);
+        resp->residual_capacity = ( be16toh(*((uint16_t *)&data[BASIC_STATUS_RESIDUAL_CAPACITY_OFST])) / 100.0f);
+        resp->nominal_capacity = ( be16toh(*((uint16_t *)&data[BASIC_STATUS_NOMINAL_CAPACITY_OFST])) / 100.0f);
+        resp->cycle_life = be16toh(*((uint16_t *)&data[BASIC_STATUS_CYCLE_LIFE_OFST]));
+        resp->product_date = be16toh(*((uint16_t *)&data[BASIC_STATUS_PRODUCT_DATE_OFST]));
+        resp->balance_status =  (be16toh(*((uint16_t *)&data[BASIC_STATUS_BALANCE_STATUS_OFST])) << 0) |
+                                (be16toh(*((uint16_t *)&data[BASIC_STATUS_BALANCE_STATUS_HIGH_OFST])) << 16);
+
+        uint16_t protection_status = be16toh(*((uint16_t *)&data[BASIC_STATUS_PROTECTION_STATUS_OFST]));
+        resp->protection_status.mosfet_software_lock    = ((protection_status >> 12) & 0x01);
+        resp->protection_status.ic_frontend_error       = ((protection_status >> 11) & 0x01);
+        resp->protection_status.short_circuit           = ((protection_status >> 10) & 0x01);
+        resp->protection_status.discharge_overcurrent   = ((protection_status >> 9) & 0x01);
+        resp->protection_status.charge_overcurrent      = ((protection_status >> 8) & 0x01);
+        resp->protection_status.discharge_low_temp      = ((protection_status >> 7) & 0x01);
+        resp->protection_status.discharge_high_temp     = ((protection_status >> 6) & 0x01);
+        resp->protection_status.charge_low_temp         = ((protection_status >> 5) & 0x01);
+        resp->protection_status.charge_high_temp        = ((protection_status >> 4) & 0x01);
+        resp->protection_status.battery_under_voltage   = ((protection_status >> 3) & 0x01);
+        resp->protection_status.battery_over_voltage    = ((protection_status >> 2) & 0x01);
+        resp->protection_status.cell_under_voltage      = ((protection_status >> 1) & 0x01);
+        resp->protection_status.cell_over_voltage       = ((protection_status >> 0) & 0x01);
+
+        resp->version = data[BASIC_STATUS_VERSION_OFST];
+        resp->rsoc = data[BASIC_STATUS_RSOC_OFST];
+
+        uint8_t fet_control_status = data[BASIC_STATUS_FET_CONTROL_STATUS_OFST];
+        resp->fet_control_status.is_charging            = ((fet_control_status >> 1) & 0x01);
+        resp->fet_control_status.is_discharging         = ((fet_control_status >> 0) & 0x01);
+
+        resp->cell_series_count = data[BASIC_STATUS_CELL_SERIES_COUNT_OFST];
+        resp->ntc_temperature_cnt = data[BASIC_STATUS_NTC_TEMPERATURE_CNT_OFST];
+
+        for( int idx = 0; (idx < HW_BMS_PROTOCOL_NTC_TEMPERATURE_COUNT_MAX) && (idx < resp->ntc_temperature_cnt); idx++ ) {
+            uint16_t ntc_temperature = be16toh(*((uint16_t *)&data[BASIC_STATUS_NTC_TEMPERATURE_TBL_OFST + sizeof(uint16_t)]));
+            resp->ntc_temperature[idx] = (ntc_temperature / 10.0f) - 273.15f;
+        }
     }
 
-    return success ? 0 : -1;
-}
-
-
-static uint16_t calc_checksum( uint8_t * data )
-{
-    uint16_t checksum = 0xFFFF;
-    uint8_t length = data[SIZE_IDX];
-
-    // Subtract Command/Status
-    checksum -= data[2];
-
-    // Subtract Length
-    checksum -= length;
-
-    // Subtract Data
-    for( int i = 0; i < length; i++ ) {
-        checksum -= data[DATA_IDX + i];
-    }
-
-    checksum += 1;
-
-    return checksum;
-}
-
-
-
-static uint16_t read_checksum( uint8_t * data )
-{
-    uint16_t checksum;
-    uint8_t length = data[SIZE_IDX];
-
-    checksum = data[DATA_IDX + length] << 8 | data[DATA_IDX + length + 1];
-
-    return checksum;
+    return success;
 }

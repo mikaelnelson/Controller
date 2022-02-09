@@ -1,19 +1,30 @@
 /*********************
  *      INCLUDES
  *********************/
-#include <string.h>
-#include <stdbool.h>
-#include <stdint.h>
-
-#include <stdio.h>
-
-#include "protocol.nail.h"
+#include "hw_motor_controller_protocol.h"
 
 /**********************
  *      DEFINES
  *********************/
-#define CMD_IDX             0
-#define SIZE_IDX            1
+
+#define MONITOR_1_RESP_THROTTLE_PEDAL_OFST          0
+#define MONITOR_1_RESP_BRAKE_PEDAL_OFST             1
+#define MONITOR_1_RESP_BRAKE_SWITCH_OFST            2
+#define MONITOR_1_RESP_FOOT_SWITCH_OFST             3
+#define MONITOR_1_RESP_REVERSE_SWITCH_OFST          4
+#define MONITOR_1_RESP_REVERSED_OFST                5
+#define MONITOR_1_RESP_HALL_A_OFST                  6
+#define MONITOR_1_RESP_HALL_B_OFST                  7
+#define MONITOR_1_RESP_HALL_C_OFST                  8
+#define MONITOR_1_RESP_BATTERY_VOLTAGE_OFST         9
+#define MONITOR_1_RESP_MOTOR_TEMPERATURE_OFST       10
+#define MONITOR_1_RESP_CONTROLLER_TEMPERATURE_OFST  11
+#define MONITOR_1_RESP_SETTING_DIRECTION_OFST       12
+#define MONITOR_1_RESP_ACTUAL_DIRECTION_OFST        13
+#define MONITOR_1_RESP_BRAKE_SWITCH_2_OFST          14
+#define MONITOR_1_RESP_LOW_SPEED_SWITCH_OFST        15
+
+#define MONITOR_1_RESP_SIZE                         16
 
 /**********************
  *      TYPEDEFS
@@ -30,6 +41,7 @@
 /**********************
  *      MACROS
  **********************/
+#define BOOL( _val )    ( ( (_val) == 0 ) ? false : true )
 
 /**********************
 *      EXTERNS
@@ -38,85 +50,35 @@
 /**********************
  *    PROTOTYPES
  **********************/
-static uint8_t calc_checksum( const uint8_t * data, size_t data_sz );
-static uint8_t read_checksum( const uint8_t * data, size_t data_sz );
 
-int motor_controller_checksum_generate(NailArena *tmp_arena, NailOutStream *str_current, uint8_t *checksum)
+bool hw_motor_controller_monitor_1_resp( hw_montor_controller_monitor_1_resp_t * resp, const uint8_t * data, size_t data_sz )
 {
-    NailOutStream    * stream_in;
+    bool        success = false;
 
-    // Rename I/O Streams
-    stream_in = str_current;
+    // Validate Resp & Data & Size
+    success = ( ( NULL != resp ) &&
+                ( NULL != data ) &&
+                ( MONITOR_1_RESP_SIZE == data_sz ));
 
-    // Calculate Checksum from stream_in
-    *checksum = calc_checksum( stream_in->data, 1 + stream_in->data[SIZE_IDX] );
-
-    return 0;
-}
-
-
-int motor_controller_checksum_parse( NailArena *tmp, NailStream *current, uint8_t *checksum )
-{
-//    NailStream    * stream_in;
-    bool            success;
-
-//    // Rename I/O Streams
-//    stream_in = current;
-//
-//    // Calculate Checksum Using Current Data
-//    uint16_t cl_checksum = calc_checksum( stream_in->data, stream_in->size );
-//
-//    // Get Checksum From Current Data
-//    uint16_t rx_checksum = read_checksum(stream_in->data);
-//
-//    // Compare Checksums
-//    success = ( cl_checksum == rx_checksum );
-//
-//    if( success ) {
-//        *checksum = cl_checksum;
-//    }
-
-    success = true;
-
-    return success ? 0 : -1;
-}
-
-static uint8_t calc_checksum( const uint8_t * data, size_t data_sz )
-{
-    uint8_t checksum = 0;
-
-    // Calculate Checksum
-    for( int idx = 0; idx < data_sz; idx++ ) {
-        checksum += data[idx];
+    // Parse Packet & Validate
+    if( success ) {
+        resp->throttle_pedal            = data[MONITOR_1_RESP_THROTTLE_PEDAL_OFST];
+        resp->brake_pedal               = data[MONITOR_1_RESP_BRAKE_PEDAL_OFST];
+        resp->brake_switch              = BOOL(data[MONITOR_1_RESP_BRAKE_SWITCH_OFST]);
+        resp->foot_switch               = BOOL(data[MONITOR_1_RESP_FOOT_SWITCH_OFST]);
+        resp->reverse_switch            = BOOL(data[MONITOR_1_RESP_REVERSE_SWITCH_OFST]);
+        resp->reversed                  = BOOL(data[MONITOR_1_RESP_REVERSED_OFST]);
+        resp->hall_a                    = BOOL(data[MONITOR_1_RESP_HALL_A_OFST]);
+        resp->hall_b                    = BOOL(data[MONITOR_1_RESP_HALL_B_OFST]);
+        resp->hall_c                    = BOOL(data[MONITOR_1_RESP_HALL_C_OFST]);
+        resp->battery_voltage           = data[MONITOR_1_RESP_BATTERY_VOLTAGE_OFST];
+        resp->motor_temperature         = data[MONITOR_1_RESP_MOTOR_TEMPERATURE_OFST];
+        resp->controller_temperature    = data[MONITOR_1_RESP_CONTROLLER_TEMPERATURE_OFST];
+        resp->setting_direction         = BOOL(data[MONITOR_1_RESP_SETTING_DIRECTION_OFST]);
+        resp->actual_direction          = BOOL(data[MONITOR_1_RESP_ACTUAL_DIRECTION_OFST]);
+        resp->brake_switch_2            = BOOL(data[MONITOR_1_RESP_BRAKE_SWITCH_2_OFST]);
+        resp->low_speed_switch          = BOOL(data[MONITOR_1_RESP_LOW_SPEED_SWITCH_OFST]);
     }
 
-    return checksum;
-}
-
-static uint8_t read_checksum( const uint8_t * data, size_t data_sz )
-{
-//    bool            success;
-//    header_t      * header;
-//    uint16_t        checksum_ofst;
-//
-//    // Is Input Valid?
-//    success = ( NULL != data );
-//
-//    // Get Header
-//    if( success ) {
-//        header = (header_t *)data;
-//    }
-//
-//    // Get Checksum Offset
-//    if( success ) {
-//        checksum_ofst = sizeof(header_t) + header->payload_sz;
-//        success = ( checksum_ofst < data_sz );
-//    }
-//
-//    // Update Checksum
-//    if( success ) {
-//        ((uint8_t *)data)[checksum_ofst] = calc_checksum( (uint8_t *)data, checksum_ofst );
-//    }
-
-return 0;
+    return success;
 }
