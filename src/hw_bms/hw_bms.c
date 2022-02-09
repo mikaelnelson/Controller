@@ -150,42 +150,42 @@ _Noreturn static void bms_parse_task( void * params )
                 case CMD_BASIC_INFO: {
                     hw_bms_basic_status_resp_t  resp;
 
-                    success = hw_bms_basic_status_resp( &resp, pkt_data, pkt_data_sz );
+                    success = hw_bms_basic_status_resp_parse( &resp, pkt_data, pkt_data_sz );
 
                     if( success ) {
-                        printf("total voltage: %f\n", resp.total_voltage);
-//                        PUB_DBL("bms.total_voltage", (double)(resp->total_voltage * 0.01));
-//                        PUB_DBL("bms.current", (double)(resp->current * 0.01));
-//                        PUB_DBL("bms.residual_capacity", (double)(resp->residual_capacity * 0.01));
-//                        PUB_DBL("bms.nominal_capacity", (double)(resp->nominal_capacity * 0.01));
-//                        PUB_INT("bms.cycle_life", resp->cycle_life);
-//                        PUB_INT("bms.balance_status", (resp->balance_status_high << 16) | resp->balance_status);
-//
-//                        PUB_BOOL("bms.protection_status.mosfet_software_lock", resp->protection_status.mosfet_software_lock);
-//                        PUB_BOOL("bms.protection_status.ic_frontend_error", resp->protection_status.ic_frontend_error);
-//                        PUB_BOOL("bms.protection_status.short_circuit", resp->protection_status.short_circuit);
-//                        PUB_BOOL("bms.protection_status.discharge_overcurrent", resp->protection_status.discharge_overcurrent);
-//                        PUB_BOOL("bms.protection_status.charge_overcurrent", resp->protection_status.charge_overcurrent);
-//                        PUB_BOOL("bms.protection_status.discharge_low_temp", resp->protection_status.discharge_low_temp);
-//                        PUB_BOOL("bms.protection_status.discharge_high_temp", resp->protection_status.discharge_high_temp);
-//                        PUB_BOOL("bms.protection_status.charge_low_temp", resp->protection_status.charge_low_temp);
-//                        PUB_BOOL("bms.protection_status.charge_high_temp", resp->protection_status.charge_high_temp);
-//                        PUB_BOOL("bms.protection_status.battery_under_voltage", resp->protection_status.battery_under_voltage);
-//                        PUB_BOOL("bms.protection_status.battery_over_voltage", resp->protection_status.battery_over_voltage);
-//                        PUB_BOOL("bms.protection_status.cell_under_voltage", resp->protection_status.cell_under_voltage);
-//                        PUB_BOOL("bms.protection_status.cell_over_voltage", resp->protection_status.cell_over_voltage);
-//
-//                        PUB_INT("bms.version", resp->version);
-//                        PUB_INT("bms.rsoc", resp->rsoc);
-//                        PUB_BOOL("bms.fet_control_status.is_charging", resp->fet_control_status.is_charging);
-//                        PUB_BOOL("bms.fet_control_status.is_discharging", resp->fet_control_status.is_discharging);
-//                        PUB_INT("bms.cell_series_count", resp->cell_series_count);
-//
-//                        for(int idx = 0; idx < resp->ntc_temperature.count; idx++) {
-//                            char tag[32];
-//                            snprintf(tag, sizeof(tag), "bms.ntc_temperature_%d", idx);
-//
-//                            PUB_DBL(tag, (double)(resp->ntc_temperature.elem[idx] * 0.01));
+                        PUB_DBL("bms.total_voltage", resp.total_voltage);
+                        PUB_DBL("bms.current", resp.current);
+                        PUB_DBL("bms.residual_capacity", resp.residual_capacity);
+                        PUB_DBL("bms.nominal_capacity", resp.nominal_capacity);
+                        PUB_INT("bms.cycle_life", resp.cycle_life);
+                        PUB_INT("bms.balance_status", resp.balance_status);
+
+                        PUB_BOOL("bms.protection_status.mosfet_software_lock", resp.protection_status.mosfet_software_lock);
+                        PUB_BOOL("bms.protection_status.ic_frontend_error", resp.protection_status.ic_frontend_error);
+                        PUB_BOOL("bms.protection_status.short_circuit", resp.protection_status.short_circuit);
+                        PUB_BOOL("bms.protection_status.discharge_overcurrent", resp.protection_status.discharge_overcurrent);
+                        PUB_BOOL("bms.protection_status.charge_overcurrent", resp.protection_status.charge_overcurrent);
+                        PUB_BOOL("bms.protection_status.discharge_low_temp", resp.protection_status.discharge_low_temp);
+                        PUB_BOOL("bms.protection_status.discharge_high_temp", resp.protection_status.discharge_high_temp);
+                        PUB_BOOL("bms.protection_status.charge_low_temp", resp.protection_status.charge_low_temp);
+                        PUB_BOOL("bms.protection_status.charge_high_temp", resp.protection_status.charge_high_temp);
+                        PUB_BOOL("bms.protection_status.battery_under_voltage", resp.protection_status.battery_under_voltage);
+                        PUB_BOOL("bms.protection_status.battery_over_voltage", resp.protection_status.battery_over_voltage);
+                        PUB_BOOL("bms.protection_status.cell_under_voltage", resp.protection_status.cell_under_voltage);
+                        PUB_BOOL("bms.protection_status.cell_over_voltage", resp.protection_status.cell_over_voltage);
+
+                        PUB_INT("bms.version", resp.version);
+                        PUB_INT("bms.rsoc", resp.rsoc);
+                        PUB_BOOL("bms.fet_control_status.is_charging", resp.fet_control_status.is_charging);
+                        PUB_BOOL("bms.fet_control_status.is_discharging", resp.fet_control_status.is_discharging);
+                        PUB_INT("bms.cell_series_count", resp.cell_series_count);
+
+                        for(int idx = 0; idx < resp.ntc_temperature_cnt; idx++) {
+                            char tag[32];
+                            snprintf( tag, sizeof( tag ), "bms.ntc_temperature_%d", idx );
+
+                            PUB_DBL( tag, resp.ntc_temperature[idx] );
+                        }
                     }
                 } break;
 

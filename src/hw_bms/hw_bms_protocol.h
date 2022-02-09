@@ -15,11 +15,11 @@ extern "C" {
 /*********************
  *      DEFINES
  *********************/
+#define HW_BMS_PROTOCOL_NTC_TEMPERATURE_COUNT_MAX       3
 
 /**********************
  *      TYPEDEFS
  **********************/
-#define HW_BMS_PROTOCOL_NTC_TEMPERATURE_COUNT_MAX       3
 
 typedef struct {
     float               total_voltage;
@@ -32,12 +32,13 @@ typedef struct {
     struct {
         bool            mosfet_software_lock;
         bool            ic_frontend_error;
+        bool            short_circuit;
         bool            discharge_overcurrent;
         bool            charge_overcurrent;
         bool            discharge_low_temp;
         bool            discharge_high_temp;
         bool            charge_low_temp;
-        bool            discharge_high_temp;
+        bool            charge_high_temp;
         bool            battery_under_voltage;
         bool            battery_over_voltage;
         bool            cell_under_voltage;
@@ -65,8 +66,7 @@ typedef struct {
 /**********************
  * GLOBAL PROTOTYPES
  **********************/
-
-bool hw_bms_basic_status_resp( hw_bms_basic_status_resp_t * resp, const uint8_t * data, size_t data_sz );
+bool hw_bms_basic_status_resp_parse( hw_bms_basic_status_resp_t * resp, const uint8_t * data, size_t data_sz );
 
 #ifdef __cplusplus
 } /* extern "C" */
